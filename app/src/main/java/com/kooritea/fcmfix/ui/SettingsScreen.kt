@@ -82,13 +82,15 @@ fun SettingsScreen(
             item { SectionHeader("应用") }
             item {
                 GroupCard {
+                    val auto = config?.autoAllowFcm == true
                     ActionRow(
                         R.drawable.ic_select_all, "放行所有包含 FCM 的应用",
                         when {
+                            auto -> "已开启自动放行，不需要再全部放行"
                             fcmApps == null -> "正在读取应用列表…"
-                            else -> "共 ${fcmApps.size} 个；之后安装的应用需要再手动放行"
+                            else -> "共 ${fcmApps.size} 个；之后安装的应用不会自动放行"
                         },
-                        enabled = editable && fcmApps != null,
+                        enabled = editable && !auto && fcmApps != null,
                     ) { confirmAllowAll = true }
                 }
             }
@@ -117,7 +119,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { confirmAllowAll = false },
             title = { Text("放行所有包含 FCM 的应用？") },
-            text = { Text("将放行 ${fcmApps.size} 个应用。之后安装的应用需要再手动放行。") },
+            text = { Text("将放行 ${fcmApps.size} 个应用。之后安装的应用需要再手动放行，或开启“自动放行包含 FCM 的应用”。") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmAllowAll = false

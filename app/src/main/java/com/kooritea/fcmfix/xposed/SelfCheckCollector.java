@@ -14,6 +14,7 @@ import android.os.Parcel;
 import android.os.PowerManager;
 import android.provider.Settings;
 
+import com.kooritea.fcmfix.util.ConfigSnapshot;
 import com.kooritea.fcmfix.util.FcmTrust;
 import com.kooritea.fcmfix.util.PushRecords;
 import com.kooritea.fcmfix.util.SelfCheck;
@@ -44,10 +45,12 @@ final class SelfCheckCollector {
         FcmConnectionMonitor.push(packageName);
     }
 
-    static void collect(Context context, Set<String> allowList, Bundle out) {
-        out.putBoolean(SelfCheck.KEY_CONFIG_LOADED, allowList != null);
-        if (allowList != null) {
-            out.putInt(SelfCheck.KEY_MANUAL_COUNT, allowList.size());
+    static void collect(Context context, ConfigSnapshot config, Bundle out) {
+        out.putBoolean(SelfCheck.KEY_CONFIG_LOADED, config != null);
+        out.putInt(SelfCheck.KEY_FCM_PACKAGES, FcmPackages.size());
+        if (config != null) {
+            out.putInt(SelfCheck.KEY_MANUAL_COUNT, config.allowList.size());
+            out.putBoolean(SelfCheck.KEY_AUTO_ALLOW, config.autoAllowFcm());
         }
         PackageManager pm = context.getPackageManager();
 
@@ -75,8 +78,12 @@ final class SelfCheckCollector {
         settings.add("deepsleep_switch_state=" + setting(() -> Settings.Secure.getString(resolver, "deepsleep_switch_state")));
         out.putStringArrayList(SelfCheck.KEY_SETTINGS, settings);
 
-        if (allowList == null) return;
-        Set<String> allowed = new TreeSet<>(allowList);
+        if (config == null) return;
+        Set<String> fcm = FcmPackages.current();
+        Set<String> allowed = new TreeSet<>(config.allowList);
+        if (config.autoAllowFcm()) {
+            for (String name : fcm) if (config.allows(name, fcm)) allowed.add(name);
+        }
         Set<String> running = runningPackages(context);
         Object notifications = notificationService();
         ArrayList<String> apps = new ArrayList<>();
@@ -91,6 +98,7 @@ final class SelfCheckCollector {
             // A ticked system package such as "android" is harmless and gets no pushes; skip it.
             if (!FcmTrust.isAppUid(info.uid)) continue;
             Bundle app = new Bundle();
+            app.putBoolean(SelfCheck.APP_AUTO, !config.allowList.contains(name));
             app.putInt(SelfCheck.APP_NOTIFY, notificationsEnabled(notifications, name, info.uid));
             app.putInt(SelfCheck.APP_BLOCKED_CHANNELS, blockedChannels(notifications, name, info.uid));
             app.putInt(SelfCheck.APP_BUCKET, standbyBucket(context, name));

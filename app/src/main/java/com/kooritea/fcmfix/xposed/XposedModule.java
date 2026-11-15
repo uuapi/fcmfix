@@ -21,6 +21,7 @@ import androidx.core.app.NotificationManagerCompat;
 import com.kooritea.fcmfix.libxposed.XC_MethodHook;
 import com.kooritea.fcmfix.libxposed.XposedBridge;
 import com.kooritea.fcmfix.libxposed.XposedHelpers;
+import com.kooritea.fcmfix.util.ConfigSnapshot;
 import com.kooritea.fcmfix.util.DiagnosticLogger;
 import com.kooritea.fcmfix.util.FcmTrust;
 import com.kooritea.fcmfix.util.HookStatus;
@@ -29,8 +30,6 @@ import com.kooritea.fcmfix.util.SelfCheck;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -40,9 +39,8 @@ public abstract class XposedModule {
     private static String selfPackageName = "UNKNOWN";
 
     protected final ClassLoader classLoader;
-    public static Set<String> allowList = null;
     static final String TAG = "FcmFix";
-    private static final HashMap<String, Object> config = new HashMap<>();
+    private static volatile ConfigSnapshot config;
 
     @SuppressLint("StaticFieldLeak")
     protected static Context context = null;
@@ -154,27 +152,21 @@ public abstract class XposedModule {
     };
 
     protected boolean targetIsAllow(String packageName) {
-        if (config.get("init") == null) {
-            this.checkUserDeviceUnlockAndUpdateConfig();
+        ConfigSnapshot snapshot = config;
+        if (snapshot == null) {
+            checkUserDeviceUnlockAndUpdateConfig();
+            return false;
         }
-        if ("com.kooritea.fcmfix".equals(packageName)) {
-            return true;
-        }
-        if (allowList != null) {
-            return allowList.contains(packageName);
-        }
-        return false;
+        return snapshot.allows(packageName, FcmPackages.current());
     }
 
     protected boolean getBooleanConfig(String key, boolean defaultValue) {
-        if (config.get("init") == null) {
-            this.checkUserDeviceUnlockAndUpdateConfig();
-        }
-        if (config.get("init") == null) {
+        ConfigSnapshot snapshot = config;
+        if (snapshot == null) {
+            checkUserDeviceUnlockAndUpdateConfig();
             return defaultValue;
         }
-        Object value = config.get(key);
-        return value == null ? defaultValue : (Boolean) value;
+        return snapshot.options.getOrDefault(key, defaultValue);
     }
 
     protected static void onUpdateConfig() {
@@ -188,14 +180,15 @@ public abstract class XposedModule {
                         if (remotePreferences == null) {
                             throw new IllegalStateException("remotePreferences 不可用");
                         }
-                        allowList = remotePreferences.getStringSet("allowList", allowList == null ? new HashSet<>() : allowList);
-                        if (allowList != null && "android".equals(getSelfPackageName())) {
-                            printLog("[Modern Xposed API]onUpdateConfig allowList size: " + allowList.size());
+                        ConfigSnapshot loaded = new ConfigSnapshot(remotePreferences.getAll());
+                        config = loaded;
+                        if (loaded.autoAllowFcm() && "android".equals(getSelfPackageName())) {
+                            FcmPackages.ensureScanned(context);
                         }
-                        config.put("disableAutoCleanNotification", remotePreferences.getBoolean("disableAutoCleanNotification", false));
-                        config.put("includeIceBoxDisableApp", remotePreferences.getBoolean("includeIceBoxDisableApp", false));
-                        config.put("noResponseNotification", remotePreferences.getBoolean("noResponseNotification", false));
-                        config.put("init", true);
+                        if ("android".equals(getSelfPackageName())) {
+                            printLog("配置已加载：手动放行 " + loaded.allowList.size()
+                                    + " 个，自动放行 " + loaded.autoAllowFcm());
+                        }
                     } catch (Throwable e) {
                         printLog("通过现代Xposed API读取配置失败: " + e.getMessage());
                     }
@@ -221,6 +214,18 @@ public abstract class XposedModule {
 
             if ("android".equals(getSelfPackageName())) {
                 FcmConnectionMonitor.start(context);
+                IntentFilter packageFilter = new IntentFilter();
+                packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+                packageFilter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+                packageFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+                packageFilter.addDataScheme("package");
+                context.registerReceiver(new BroadcastReceiver() {
+                    public void onReceive(Context receiverContext, Intent intent) {
+                        if (intent.getData() != null) {
+                            FcmPackages.onPackageChanged(receiverContext, intent.getData().getSchemeSpecificPart());
+                        }
+                    }
+                }, packageFilter);
             }
 
             IntentFilter updateConfigIntentFilter = new IntentFilter();
@@ -299,7 +304,7 @@ public abstract class XposedModule {
             try {
                 Bundle extras = addHookStatus(pending.getResultExtras(true), false);
                 try {
-                    SelfCheckCollector.collect(context, allowList, extras);
+                    SelfCheckCollector.collect(context, config, extras);
                 } catch (Throwable e) {
                     printLog("Self-check failed: " + e);
                 }
@@ -326,7 +331,8 @@ public abstract class XposedModule {
      */
     private static void enableNotifications(Context context, String packageName) {
         try {
-            if (allowList == null || !allowList.contains(packageName)) {
+            ConfigSnapshot snapshot = config;
+            if (snapshot == null || !snapshot.allows(packageName, FcmPackages.current())) {
                 printLog("Enable notifications skipped, not allowlisted: " + packageName);
                 return;
             }

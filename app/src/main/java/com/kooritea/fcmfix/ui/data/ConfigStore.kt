@@ -4,22 +4,45 @@ import android.app.BroadcastOptions
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.kooritea.fcmfix.util.ConfigSnapshot
 import io.github.libxposed.service.XposedService
 
-/** The options in LSPosed's remote preferences; system_server reads the same keys. */
+/** The options in LSPosed's remote preferences; system_server reads them through ConfigSnapshot. */
 data class ModuleConfig(
     val allowList: Set<String> = emptySet(),
+    /** FCM apps unticked while auto-allow is on. */
+    val excludeList: Set<String> = emptySet(),
+    val autoAllowFcm: Boolean = false,
     /** disableAutoCleanNotification */
     val keepNotifications: Boolean = false,
     /** includeIceBoxDisableApp */
     val iceBox: Boolean = false,
 ) {
-    fun allows(packageName: String): Boolean = packageName in allowList
+    /** Same rule as ConfigSnapshot.allows in system_server. */
+    fun allows(packageName: String, includeFcm: Boolean): Boolean =
+        packageName in allowList || (autoAllowFcm && includeFcm && packageName !in excludeList)
 
-    fun withAllowed(packageName: String, allowed: Boolean): ModuleConfig = if (allowed) {
-        copy(allowList = allowList + packageName)
-    } else {
-        copy(allowList = allowList - packageName)
+    /** Allowed by the auto-allow switch rather than ticked by hand. */
+    fun allowsAutomatically(packageName: String, includeFcm: Boolean): Boolean =
+        packageName !in allowList && allows(packageName, includeFcm)
+
+    /**
+     * With auto-allow on, an FCM app is ticked by leaving the exclude list and unticked by
+     * joining it; other apps use the manual allow list either way.
+     */
+    fun withAllowed(packageName: String, includeFcm: Boolean, allowed: Boolean): ModuleConfig {
+        val automatic = autoAllowFcm && includeFcm
+        return if (allowed) {
+            copy(
+                excludeList = excludeList - packageName,
+                allowList = if (automatic) allowList else allowList + packageName,
+            )
+        } else {
+            copy(
+                allowList = allowList - packageName,
+                excludeList = if (automatic) excludeList + packageName else excludeList,
+            )
+        }
     }
 }
 
@@ -31,6 +54,8 @@ object ConfigStore {
         val pref = service.getRemotePreferences(PREFERENCES)
         return ModuleConfig(
             allowList = pref.getStringSet("allowList", null).orEmpty().toSet(),
+            excludeList = pref.getStringSet("excludeList", null).orEmpty().toSet(),
+            autoAllowFcm = pref.getBoolean(ConfigSnapshot.AUTO_ALLOW_FCM, false),
             keepNotifications = pref.getBoolean("disableAutoCleanNotification", false),
             iceBox = pref.getBoolean("includeIceBoxDisableApp", false),
         )
@@ -44,6 +69,8 @@ object ConfigStore {
         val saved = service.getRemotePreferences(PREFERENCES).edit()
             .putBoolean("init", true)
             .putStringSet("allowList", HashSet(config.allowList))
+            .putStringSet("excludeList", HashSet(config.excludeList))
+            .putBoolean(ConfigSnapshot.AUTO_ALLOW_FCM, config.autoAllowFcm)
             .putBoolean("disableAutoCleanNotification", config.keepNotifications)
             .putBoolean("includeIceBoxDisableApp", config.iceBox)
             .commit()

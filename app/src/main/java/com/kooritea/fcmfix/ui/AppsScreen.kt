@@ -68,6 +68,8 @@ import java.util.Locale
 data class AppItem(
     val app: InstalledApp,
     val allowed: Boolean,
+    /** Allowed by the auto-allow switch rather than ticked by hand. */
+    val auto: Boolean,
     /** Only for allowed apps system_server already reported. */
     val check: AppCheck?,
 ) {
@@ -80,9 +82,10 @@ fun appItems(state: AppUiState): List<AppItem> {
     val config = state.config
     val checks = state.report?.status?.appChecks.orEmpty()
     return apps.map { app ->
-        val allowed = config?.allows(app.packageName) == true
+        val allowed = config?.allows(app.packageName, app.includeFcm) == true
         AppItem(
             app, allowed,
+            auto = config?.allowsAutomatically(app.packageName, app.includeFcm) == true,
             check = if (allowed) checks[app.packageName] else null,
         )
     }
@@ -180,6 +183,13 @@ fun AppsTab(state: AppUiState, actions: AppActions, nav: Navigation, modifier: M
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                item {
+                    AutoAllowCard(
+                        checked = state.config?.autoAllowFcm == true,
+                        enabled = editable,
+                        onChange = actions::setAutoAllow,
+                    )
+                }
                 if (notifyOff.isNotEmpty() && editable) {
                     item {
                         GroupCard(Modifier.padding(top = 8.dp)) {
@@ -229,6 +239,19 @@ fun AppsTab(state: AppUiState, actions: AppActions, nav: Navigation, modifier: M
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AutoAllowCard(checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    GroupCard(Modifier.padding(top = 8.dp)) {
+        ListItem(
+            modifier = Modifier.clickable(enabled = enabled) { onChange(!checked) },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            headlineContent = { Text("自动放行包含 FCM 的应用", fontWeight = FontWeight.Medium) },
+            supportingContent = { Text("新安装的应用也会自动放行；在列表中关闭的应用会被排除") },
+            trailingContent = { Switch(checked = checked, onCheckedChange = onChange, enabled = enabled) },
+        )
     }
 }
 
@@ -328,9 +351,16 @@ fun AppDetailContent(
             Column(Modifier.weight(1f)) {
                 Text(item.app.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text(item.app.packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (item.app.includeFcm) {
+                if (item.app.includeFcm || item.auto) {
                     Spacer(Modifier.height(6.dp))
-                    Pill("包含 FCM", MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (item.app.includeFcm) {
+                            Pill("包含 FCM", MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
+                        }
+                        if (item.auto) {
+                            Pill("自动放行", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
+                        }
+                    }
                 }
             }
         }
@@ -411,6 +441,7 @@ fun AppDetailContent(
 }
 
 private fun allowSummary(item: AppItem): String = when {
+    item.auto -> "由“自动放行包含 FCM 的应用”放行，关闭后会被排除"
     item.allowed -> "收到推送时，模块会唤醒并放行这个应用"
     item.app.includeFcm -> "放行后，收到推送时模块会唤醒这个应用"
     else -> "没有检测到 FCM 组件，放行通常没有作用"

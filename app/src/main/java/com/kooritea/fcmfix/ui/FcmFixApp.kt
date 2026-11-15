@@ -91,6 +91,7 @@ interface AppActions {
     fun refreshStatus()
     fun scanApps()
     fun setAllowed(target: InstalledApp, allowed: Boolean)
+    fun setAutoAllow(enabled: Boolean)
     fun setKeepNotifications(enabled: Boolean)
     fun setIceBox(enabled: Boolean)
     fun allowAllFcm()
@@ -105,6 +106,7 @@ interface AppActions {
         override fun refreshStatus() = Unit
         override fun scanApps() = Unit
         override fun setAllowed(target: InstalledApp, allowed: Boolean) = Unit
+        override fun setAutoAllow(enabled: Boolean) = Unit
         override fun setKeepNotifications(enabled: Boolean) = Unit
         override fun setIceBox(enabled: Boolean) = Unit
         override fun allowAllFcm() = Unit

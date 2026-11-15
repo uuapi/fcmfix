@@ -164,7 +164,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
             mutableRefreshing.value = true
             try {
                 val bundle = StatusQuery.query(app)
-                val local = mutableConfig.value?.let { LocalConfig(it.allowList.size) }
+                val local = mutableConfig.value?.let { LocalConfig(it.allowList.size, it.autoAllowFcm) }
                 answer.value = Answer(StatusSnapshot.from(bundle), local)
             } finally {
                 mutableRefreshing.value = false
@@ -195,7 +195,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
                         .first { (config, state) -> config != null || state == ModuleConnection.State.Missing }
                         .first
                 }
-                mutableApps.value = scanned.sortedBy { config?.allows(it.packageName) != true }
+                mutableApps.value = scanned.sortedBy { config?.allows(it.packageName, it.includeFcm) != true }
                 if (scanned.size <= 1) mutableAppListUnreadable.value = true
             } finally {
                 mutableScanning.value = false
@@ -231,7 +231,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
     }
 
     override fun setAllowed(target: InstalledApp, allowed: Boolean) =
-        updateConfig { it.withAllowed(target.packageName, allowed) }
+        updateConfig { it.withAllowed(target.packageName, target.includeFcm, allowed) }
+
+    override fun setAutoAllow(enabled: Boolean) = updateConfig { it.copy(autoAllowFcm = enabled) }
 
     override fun setKeepNotifications(enabled: Boolean) = updateConfig { it.copy(keepNotifications = enabled) }
 

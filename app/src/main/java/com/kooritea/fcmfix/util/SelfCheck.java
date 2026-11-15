@@ -12,6 +12,9 @@ public final class SelfCheck {
 
     public static final String KEY_CONFIG_LOADED = "check.configLoaded";
     public static final String KEY_MANUAL_COUNT = "check.manualCount";
+    public static final String KEY_AUTO_ALLOW = "check.autoAllow";
+    /** Installed FCM apps system_server knows of, or UNKNOWN when it has not scanned. */
+    public static final String KEY_FCM_PACKAGES = "check.fcmPackages";
     public static final String KEY_GMS_POLICY = "check.gmsPolicy";
     public static final String KEY_GMS_BUCKET = "check.gmsBucket";
     public static final String KEY_GMS_DOZE = "check.gmsDoze";
@@ -57,6 +60,7 @@ public final class SelfCheck {
     public static final int FCM_CONNECTED = 2;
     public static final String APP_PREFIX = "check.app.";
 
+    public static final String APP_AUTO = "auto";
     public static final String APP_NOTIFY = "notify";
     public static final String APP_BLOCKED_CHANNELS = "blockedChannels";
     public static final String APP_BUCKET = "bucket";
@@ -123,11 +127,12 @@ public final class SelfCheck {
         return new Verdict(Level.FAIL, "未加入", "GMS 不在电池优化白名单里，熄屏后长连接可能被限制；可在系统设置的电池优化中忽略 GMS");
     }
 
-    public static Verdict configSync(boolean remoteLoaded, int remoteManual, int localManual) {
+    public static Verdict configSync(boolean remoteLoaded, int remoteManual, boolean remoteAuto,
+                                     int localManual, boolean localAuto) {
         if (!remoteLoaded) {
             return new Verdict(Level.FAIL, "系统框架没有读到配置", "请在 FCMFix 中重新勾选一次应用，或重启手机");
         }
-        if (remoteManual != localManual) {
+        if (remoteManual != localManual || remoteAuto != localAuto) {
             return new Verdict(Level.WARN, "系统框架的配置和这里不一致",
                     "Android 14 以下修改配置后需要重启；其他情况请重新打开 FCMFix 再查一次");
         }
@@ -135,6 +140,18 @@ public final class SelfCheck {
     }
 
     public static Verdict appNotify(int notify, int blockedChannels) {
+        return appNotify(notify, blockedChannels, false);
+    }
+
+    /**
+     * An auto-allowed app was not picked by the user, so notifications switched off are most
+     * likely deliberate: report them without counting the app as a problem.
+     */
+    public static Verdict appNotify(int notify, int blockedChannels, boolean auto) {
+        if (notify == 0 && auto) {
+            return new Verdict(Level.INFO, "通知已关闭",
+                    "自动放行的应用，需要它的推送时在系统设置中打开通知；不需要可在“应用”页关闭放行");
+        }
         if (notify == 0) return new Verdict(Level.FAIL, "通知已关闭", "推送到达后无法弹出通知；点进来可一键开启");
         if (notify < 0) return new Verdict(Level.UNKNOWN, "通知状态未知", null);
         if (blockedChannels > 0) {

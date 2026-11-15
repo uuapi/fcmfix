@@ -49,7 +49,7 @@ data class ModuleInfo(
 )
 
 /** The module app's own copy of the config, to compare with what system_server loaded. */
-data class LocalConfig(val manualCount: Int)
+data class LocalConfig(val manualCount: Int, val autoAllow: Boolean)
 
 /** What the report needs besides the status answer. */
 class ReportEnv(
@@ -82,7 +82,7 @@ class AppVerdict private constructor(val level: Level, val notify: Verdict, val 
 
     companion object {
         fun of(app: AppCheck): AppVerdict {
-            val notify = SelfCheck.appNotify(app.notify, app.blockedChannels)
+            val notify = SelfCheck.appNotify(app.notify, app.blockedChannels, app.auto)
             val bucket = SelfCheck.appBucket(app.bucket)
             var level = notify.level
             if (bucket != null && rank(bucket.level) < rank(level)) level = bucket.level
@@ -278,9 +278,17 @@ class StatusReport private constructor(
             env.localConfig?.let { local ->
                 add(
                     "配置同步", SelfCheck.configSync(
-                        status.configLoaded, status.manualCount, local.manualCount,
+                        status.configLoaded, status.manualCount, status.autoAllow,
+                        local.manualCount, local.autoAllow,
                     ),
                 )
+            }
+            if (status.autoAllow) {
+                if (status.fcmPackages < 0) {
+                    add(Level.WARN, "自动放行", "已开启，系统框架还没有完成应用扫描", "稍后再查一次；一直如此请重启手机")
+                } else {
+                    add(Level.INFO, "自动放行", "已开启，系统框架识别到 ${status.fcmPackages} 个包含 FCM 的应用", null)
+                }
             }
         }
 
@@ -297,7 +305,8 @@ class StatusReport private constructor(
             for (name in apps) {
                 val app = status.appChecks[name] ?: continue
                 val verdict = AppVerdict.of(app)
-                val label = env.label(name)
+                var label = env.label(name)
+                if (app.auto) label += "（自动）"
                 val pushes = if (app.lastPush == 0L) "开机以来还没有收到推送"
                 else env.relativeTime(app.lastPush) + "收到推送 · 开机以来 " + app.pushCount + " 次"
                 val process = when {

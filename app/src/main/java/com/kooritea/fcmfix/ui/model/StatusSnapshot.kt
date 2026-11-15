@@ -13,6 +13,7 @@ data class HookGroups(
 
 /** What system_server reports for one allowed app. */
 data class AppCheck(
+    val auto: Boolean,
     val notify: Int,
     val blockedChannels: Int,
     val bucket: Int,
@@ -33,6 +34,8 @@ data class StatusSnapshot(
     val hooks: Map<String, HookGroups> = emptyMap(),
     val configLoaded: Boolean = false,
     val manualCount: Int = 0,
+    val autoAllow: Boolean = false,
+    val fcmPackages: Int = SelfCheck.UNKNOWN,
     val gmsPolicy: Int = SelfCheck.UNKNOWN,
     val gmsBucket: Int = SelfCheck.UNKNOWN,
     val gmsDoze: Int = SelfCheck.UNKNOWN,
@@ -68,6 +71,7 @@ data class StatusSnapshot(
             apps?.forEach { name ->
                 val app = status.getBundle(SelfCheck.APP_PREFIX + name) ?: return@forEach
                 checks[name] = AppCheck(
+                    auto = app.getBoolean(SelfCheck.APP_AUTO),
                     notify = app.getInt(SelfCheck.APP_NOTIFY, SelfCheck.UNKNOWN),
                     blockedChannels = app.getInt(SelfCheck.APP_BLOCKED_CHANNELS, SelfCheck.UNKNOWN),
                     bucket = app.getInt(SelfCheck.APP_BUCKET, SelfCheck.UNKNOWN),
@@ -88,6 +92,8 @@ data class StatusSnapshot(
                 },
                 configLoaded = status.getBoolean(SelfCheck.KEY_CONFIG_LOADED),
                 manualCount = status.getInt(SelfCheck.KEY_MANUAL_COUNT),
+                autoAllow = status.getBoolean(SelfCheck.KEY_AUTO_ALLOW),
+                fcmPackages = status.getInt(SelfCheck.KEY_FCM_PACKAGES, SelfCheck.UNKNOWN),
                 gmsPolicy = status.getInt(SelfCheck.KEY_GMS_POLICY, SelfCheck.UNKNOWN),
                 gmsBucket = status.getInt(SelfCheck.KEY_GMS_BUCKET, SelfCheck.UNKNOWN),
                 gmsDoze = status.getInt(SelfCheck.KEY_GMS_DOZE, SelfCheck.UNKNOWN),
