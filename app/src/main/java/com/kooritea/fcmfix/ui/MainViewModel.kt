@@ -1,6 +1,8 @@
 package com.kooritea.fcmfix.ui
 
 import android.app.Application
+import android.app.BroadcastOptions
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -238,6 +240,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
     override fun allowAllFcm() {
         val fcm = apps.value?.filter { it.includeFcm }?.map { it.packageName } ?: return
         updateConfig { it.copy(allowList = it.allowList + fcm) }
+    }
+
+    /** Asks system_server (which holds the permission) to turn an allowed app's notifications on. */
+    override fun enableNotifications(packageName: String) {
+        if (Build.VERSION.SDK_INT < 34) {
+            message("一键开启通知需要 Android 14 及以上")
+            return
+        }
+        try {
+            app.sendBroadcast(
+                Intent(app.packageName + ".enable.notify").putExtra("pkg", packageName), null,
+                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle(),
+            )
+            // The hook flips the toggle off the main thread; the debounced re-query shows it.
+            refreshSoon()
+        } catch (e: Throwable) {
+            Log.e(TAG, "enableNotifications", e)
+            message("开启通知失败：" + (e.message ?: e.toString()))
+        }
     }
 
     /** Writes synchronously: each change is one small binder call to LSPosed. */

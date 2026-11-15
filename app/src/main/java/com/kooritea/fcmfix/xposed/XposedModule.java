@@ -53,6 +53,7 @@ public abstract class XposedModule {
     private static final Set<String> loggedWarnings = ConcurrentHashMap.newKeySet();
     protected static final String MODULE_PACKAGE_NAME = "com.kooritea.fcmfix";
     private static final String ACTION_QUERY_STATUS = MODULE_PACKAGE_NAME + HookStatus.QUERY_ACTION_SUFFIX;
+    private static final String ACTION_ENABLE_NOTIFY = MODULE_PACKAGE_NAME + ".enable.notify";
     private static final DiagnosticLogger diagnosticLogger = new DiagnosticLogger(
             text -> XposedBridge.log("[fcmfix] " + text),
             error -> Log.w(TAG, "Diagnostic logging failed; further warnings suppressed", error));
@@ -226,11 +227,18 @@ public abstract class XposedModule {
             updateConfigIntentFilter.addAction("com.kooritea.fcmfix.update.config");
             if (Build.VERSION.SDK_INT >= 34) {
                 updateConfigIntentFilter.addAction(ACTION_QUERY_STATUS);
+                updateConfigIntentFilter.addAction(ACTION_ENABLE_NOTIFY);
                 context.registerReceiver(new BroadcastReceiver() {
                     public void onReceive(Context receiverContext, Intent intent) {
                         String action = intent.getAction();
                         if ("com.kooritea.fcmfix.update.config".equals(action) && isConfigSender(this)) {
                             onUpdateConfig();
+                        } else if (ACTION_ENABLE_NOTIFY.equals(action) && isConfigSender(this)) {
+                            String pkg = intent.getStringExtra("pkg");
+                            if (pkg != null && !"android".equals(getSelfPackageName())) return;
+                            if (pkg != null) {
+                                new Thread(() -> enableNotifications(context, pkg), "FCMFix-enable-notify").start();
+                            }
                         } else if (ACTION_QUERY_STATUS.equals(action) && isOrderedBroadcast() && isConfigSender(this)) {
                             if (intent.getBooleanExtra(SelfCheck.EXTRA_CHECK, false)
                                     && "android".equals(getSelfPackageName())) {
@@ -309,6 +317,28 @@ public abstract class XposedModule {
                     && receiver.getSentFromUid() == context.getPackageManager().getPackageUid(MODULE_PACKAGE_NAME, 0);
         } catch (android.content.pm.PackageManager.NameNotFoundException e) {
             return false;
+        }
+    }
+
+    /**
+     * The module app may turn an allowed app's notifications on, never off, and only through a
+     * sender-checked broadcast: notification state is the app's own choice otherwise.
+     */
+    private static void enableNotifications(Context context, String packageName) {
+        try {
+            if (allowList == null || !allowList.contains(packageName)) {
+                printLog("Enable notifications skipped, not allowlisted: " + packageName);
+                return;
+            }
+            android.content.pm.ApplicationInfo info = context.getPackageManager().getApplicationInfo(packageName, 0);
+            if (!FcmTrust.isAppUid(info.uid)) return;
+            Object service = NotificationManager.class.getMethod("getService").invoke(null);
+            Class.forName("android.app.INotificationManager")
+                    .getMethod("setNotificationsEnabledForPackage", String.class, int.class, boolean.class)
+                    .invoke(service, packageName, info.uid, Boolean.TRUE);
+            printLog("Enabled notifications: " + packageName, true);
+        } catch (Throwable e) {
+            printLog("Enable notifications failed for " + packageName + ": " + e);
         }
     }
 

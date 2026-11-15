@@ -94,6 +94,7 @@ interface AppActions {
     fun setKeepNotifications(enabled: Boolean)
     fun setIceBox(enabled: Boolean)
     fun allowAllFcm()
+    fun enableNotifications(packageName: String)
     fun requestScope(scopes: List<String>)
     fun copyText(): String?
     fun startExport()
@@ -107,6 +108,7 @@ interface AppActions {
         override fun setKeepNotifications(enabled: Boolean) = Unit
         override fun setIceBox(enabled: Boolean) = Unit
         override fun allowAllFcm() = Unit
+        override fun enableNotifications(packageName: String) = Unit
         override fun requestScope(scopes: List<String>) = Unit
         override fun copyText(): String? = null
         override fun startExport() = Unit

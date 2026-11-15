@@ -119,6 +119,13 @@ fun AppsTab(state: AppUiState, actions: AppActions, nav: Navigation, modifier: M
     val shown = remember(items, query, filter) { items.filter { filter.matches(it) && it.matches(query) } }
     val editable = state.config != null
     val focus = remember { FocusRequester() }
+    val notifyOff = remember(items) { items.filter { it.allowed && it.check?.notify == 0 } }
+
+    fun enableAllOffNotifications() {
+        if (notifyOff.isEmpty()) return
+        notifyOff.forEach { actions.enableNotifications(it.app.packageName) }
+        actions.message("已请求开启 ${notifyOff.size} 个应用的通知，稍后自动刷新")
+    }
 
     BackHandler(searching) {
         searching = false
@@ -173,6 +180,24 @@ fun AppsTab(state: AppUiState, actions: AppActions, nav: Navigation, modifier: M
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                if (notifyOff.isNotEmpty() && editable) {
+                    item {
+                        GroupCard(Modifier.padding(top = 8.dp)) {
+                            ListItem(
+                                modifier = Modifier.clickable { enableAllOffNotifications() },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                leadingContent = { LevelIcon(Level.FAIL) },
+                                headlineContent = {
+                                    Text("${notifyOff.size} 个放行的应用通知已关闭", fontWeight = FontWeight.Medium)
+                                },
+                                supportingContent = { Text("点击一键开启；推送要弹出通知，必须先有通知权限") },
+                                trailingContent = {
+                                    Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null)
+                                },
+                            )
+                        }
+                    }
+                }
                 item {
                     FilterRow(filter, items) { filter = it }
                 }
@@ -270,6 +295,10 @@ fun AppDetailSheet(item: AppItem, state: AppUiState, actions: AppActions, nav: N
             item,
             editable = state.config != null,
             onToggle = { actions.setAllowed(item.app, it) },
+            onEnableNotify = {
+                actions.enableNotifications(item.app.packageName)
+                actions.message("已请求开启通知，稍后自动刷新")
+            },
             onOpenSettings = { nav.openAppSettings(item.app.packageName) },
             onExport = {
                 onDismiss()
@@ -286,6 +315,7 @@ fun AppDetailContent(
     item: AppItem,
     editable: Boolean,
     onToggle: (Boolean) -> Unit,
+    onEnableNotify: () -> Unit,
     onOpenSettings: () -> Unit,
     onExport: () -> Unit,
     exportable: Boolean,
@@ -313,6 +343,18 @@ fun AppDetailContent(
                 supportingContent = { Text(allowSummary(item)) },
                 trailingContent = { Switch(checked = item.allowed, onCheckedChange = onToggle, enabled = editable) },
             )
+            val check = item.check
+            if (check != null && check.notify == 0) {
+                RowDivider()
+                ListItem(
+                    modifier = Modifier.clickable(enabled = editable, onClick = onEnableNotify),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    leadingContent = { LevelIcon(Level.FAIL, size = 36.dp) },
+                    headlineContent = { Text("开启通知", fontWeight = FontWeight.Medium) },
+                    supportingContent = { Text("推送到达后，系统才能为这个应用弹出通知") },
+                    trailingContent = { Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null) },
+                )
+            }
         }
         val check = item.check
         val verdict = item.verdict

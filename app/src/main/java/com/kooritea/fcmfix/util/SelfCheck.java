@@ -135,7 +135,7 @@ public final class SelfCheck {
     }
 
     public static Verdict appNotify(int notify, int blockedChannels) {
-        if (notify == 0) return new Verdict(Level.FAIL, "通知已关闭", "在系统设置中打开该应用的通知");
+        if (notify == 0) return new Verdict(Level.FAIL, "通知已关闭", "推送到达后无法弹出通知；点进来可一键开启");
         if (notify < 0) return new Verdict(Level.UNKNOWN, "通知状态未知", null);
         if (blockedChannels > 0) {
             return new Verdict(Level.WARN, blockedChannels + " 个通知类别已关闭",
