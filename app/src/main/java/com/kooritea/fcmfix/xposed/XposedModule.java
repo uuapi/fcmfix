@@ -20,11 +20,15 @@ import androidx.core.app.NotificationManagerCompat;
 import com.kooritea.fcmfix.libxposed.XC_MethodHook;
 import com.kooritea.fcmfix.libxposed.XposedBridge;
 import com.kooritea.fcmfix.libxposed.XposedHelpers;
+import com.kooritea.fcmfix.util.FcmTrust;
+import com.kooritea.fcmfix.util.OplusAttribution;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static android.content.Context.NOTIFICATION_SERVICE;
 
@@ -42,6 +46,7 @@ public abstract class XposedModule {
     private static Boolean isInitReceiver = false;
     public static Boolean isBootComplete = false;
     private static Thread loadConfigThread = null;
+    private static final Set<String> loggedWarnings = ConcurrentHashMap.newKeySet();
 
     protected XposedModule(final ClassLoader classLoader) {
         this.classLoader = classLoader;
@@ -301,6 +306,98 @@ public abstract class XposedModule {
     protected boolean isFCMIntent(Intent intent) {
         String action = intent.getAction();
         return isFCMAction(action);
+    }
+
+    protected static void logOnce(String message) {
+        // Bounded deduplication so third-party spam cannot grow system_server memory indefinitely.
+        if (loggedWarnings.size() < 64 && loggedWarnings.add(message)) printLog(message);
+    }
+
+    protected String findAllowedPackageArgument(Object[] args) {
+        for (Object arg : args) {
+            if (arg instanceof String && targetIsAllow((String) arg)) {
+                return (String) arg;
+            }
+        }
+        return null;
+    }
+
+    protected static boolean isGmsUid(int uid) {
+        if (context == null || uid < 10000) return false;
+        // Existing unfreeze/UID resolution uses this process's user. Do not apply its
+        // window to the personal-profile copy of a work-profile broadcast target.
+        if (!android.os.UserHandle.getUserHandleForUid(uid).equals(android.os.Process.myUserHandle())) return false;
+        try {
+            String[] packages = context.getPackageManager().getPackagesForUid(uid);
+            return FcmTrust.isGmsSender(uid, packages);
+        } catch (RuntimeException e) {
+            printLog("Cannot verify GMS UID: " + e.getMessage());
+        }
+        return false;
+    }
+
+    protected static String explicitTarget(Intent intent) {
+        if (intent == null) return null;
+        return FcmTrust.target(intent.getPackage(), intent.getComponent() == null
+                ? null : intent.getComponent().getPackageName());
+    }
+
+    protected static int attributionIndex(Method method) {
+        String[] types = java.util.Arrays.stream(method.getParameterTypes()).map(Class::getName).toArray(String[]::new);
+        return OplusAttribution.callerIndex(method.getDeclaringClass().getName(),
+                method.getName(), method.getReturnType().getName(), types);
+    }
+
+    /**
+     * The ColorOS-fork delivery trust model: a gate is only bypassed when the invocation
+     * carries a real GMS sender, an exact FCM action and an allowlisted explicit target.
+     */
+    protected boolean trustedDelivery(Intent intent, String target, XC_MethodHook.MethodHookParam param) {
+        // Require a coherent, explicit destination. Do not select an arbitrary allowlisted string argument.
+        if (!isBootComplete || intent == null || target == null || !target.equals(explicitTarget(intent))
+                || !targetIsAllow(target)) return false;
+        try {
+            // A queued broadcast is attributed by BroadcastRecord, never by ambient Binder identity.
+            for (Object arg : param.args) {
+                if (arg == null || !"com.android.server.am.BroadcastRecord".equals(arg.getClass().getName())) continue;
+                return XposedHelpers.getObjectField(arg, "intent") == intent
+                        && FcmTrust.RECEIVE.equals(intent.getAction())
+                        && isGmsUid((Integer) XposedHelpers.getObjectField(arg, "callingUid"));
+            }
+            if (param.method instanceof Method) {
+                Method method = (Method) param.method;
+                int index = attributionIndex(method);
+                if (index >= 0) {
+                    int callerUid = (Integer) param.args[index];
+                    String methodName = method.getName();
+                    // Validate the actual callee too, not only the Intent destination.
+                    if ("isAppClassifyRestricted".equals(methodName)) {
+                        if (!target.equals(param.args[1])) return false;
+                    } else {
+                        int serviceIndex = "isAllowStartFromBindService".equals(methodName) ? 3 : 4;
+                        Object info = XposedHelpers.getObjectField(param.args[serviceIndex], "appInfo");
+                        if (!(info instanceof android.content.pm.ApplicationInfo)
+                                || !target.equals(((android.content.pm.ApplicationInfo) info).packageName)) return false;
+                    }
+                    boolean gms = isGmsUid(callerUid);
+                    String[] packages = context.getPackageManager().getPackagesForUid(callerUid);
+                    boolean selfInWindow = packages != null && java.util.Arrays.asList(packages).contains(target)
+                            && OplusProxyFix.isInFcmDeliveryWindow(callerUid);
+                    boolean gcmBind = "isAllowStartFromBindService".equals(methodName)
+                            && "bsgcm".equals(param.args[5]);
+                    boolean trusted = FcmTrust.allowsService(intent.getAction(), gms, selfInWindow, gcmBind);
+                    if (trusted && gms) OplusProxyFix.beginFcmDeliveryWindow(target);
+                    if (!trusted) logOnce("FCM rejected: untrusted service sender uid=" + callerUid
+                            + ", target=" + target + ", method=" + methodName);
+                    return trusted;
+                }
+            }
+            // Only the synchronous broadcast path may inherit the verified entry context.
+            return FcmTrust.matches(intent.getAction(), target);
+        } catch (Throwable error) {
+            logOnce("Unsupported delivery attribution: " + param.method + ": " + error);
+            return false;
+        }
     }
 
     protected static String getSelfPackageName() {

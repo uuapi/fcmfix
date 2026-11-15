@@ -1,7 +1,10 @@
 package com.kooritea.fcmfix.xposed;
 
 import android.content.pm.PackageManager;
+import android.os.SystemClock;
 import android.os.WorkSource;
+
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.kooritea.fcmfix.util.XposedUtils;
 
@@ -14,6 +17,19 @@ public class OplusProxyFix extends XposedModule {
     private static Object s_oplusProxyWakeLock = null;
     private static volatile boolean s_useFourParams = false;
     private static volatile boolean s_signatureDetected = false;
+
+    private static final long FCM_DELIVERY_WINDOW_MS = 20_000L;
+
+    /**
+     * ColorOS can unfreeze an FCM target, deliver the broadcast and freeze it again about
+     * three seconds later. Keep only the UID involved in the current FCM delivery marked for
+     * the same kind of short execution window Android grants to high-priority push work, so
+     * hooks consulting it (e.g. the malicious-list service gate) can allow self-bindings.
+     */
+    private static final com.kooritea.fcmfix.util.FcmDeliveryWindow sFcmDeliveryWindows =
+            new com.kooritea.fcmfix.util.FcmDeliveryWindow();
+    private static final ConcurrentHashMap<Integer, String> sFcmDeliveryPackages =
+            new ConcurrentHashMap<>();
 
     public OplusProxyFix(ClassLoader classLoader) {
         super(classLoader);
@@ -156,6 +172,22 @@ public class OplusProxyFix extends XposedModule {
                 // 静默或log
             }
         }
+    }
+
+    public static void beginFcmDeliveryWindow(String target) {
+        int uid = getTargetUidFromPackageName(target);
+        if (uid < 0) return;
+
+        sFcmDeliveryWindows.begin(uid, SystemClock.elapsedRealtime());
+        sFcmDeliveryPackages.put(uid, target);
+        printLog("Oplus FCM delivery window: pkg=" + target + ", uid=" + uid
+                + ", duration=" + FCM_DELIVERY_WINDOW_MS + "ms", true);
+    }
+
+    static boolean isInFcmDeliveryWindow(int uid) {
+        if (sFcmDeliveryWindows.contains(uid, SystemClock.elapsedRealtime())) return true;
+        sFcmDeliveryPackages.remove(uid);
+        return false;
     }
 
     private void startHookRegisterGmsRestrictObserver() {

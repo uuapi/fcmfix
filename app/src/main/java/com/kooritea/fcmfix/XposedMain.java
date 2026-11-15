@@ -6,6 +6,7 @@ import com.kooritea.fcmfix.xposed.BroadcastFix;
 import com.kooritea.fcmfix.xposed.KeepNotification;
 import com.kooritea.fcmfix.xposed.MiuiLocalNotificationFix;
 import com.kooritea.fcmfix.xposed.OplusProxyFix;
+import com.kooritea.fcmfix.xposed.OplusStartupFix;
 import com.kooritea.fcmfix.xposed.PowerkeeperFix;
 import com.kooritea.fcmfix.xposed.ReconnectManagerFix;
 import com.kooritea.fcmfix.xposed.XposedModule;
@@ -28,6 +29,9 @@ public class XposedMain extends io.github.libxposed.api.XposedModule {
 
         XposedBridge.log("[fcmfix] com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
         new AutoStartFix(classLoader);
+
+        XposedBridge.log("[fcmfix] start hook OplusAppStartupManager startup gates");
+        new OplusStartupFix(classLoader);
 
         XposedBridge.log("[fcmfix] com.android.server.notification.NotificationManagerService");
         new KeepNotification(classLoader);
