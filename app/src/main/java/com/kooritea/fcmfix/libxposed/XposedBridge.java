@@ -3,12 +3,16 @@ package com.kooritea.fcmfix.libxposed;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import com.kooritea.fcmfix.util.LogRing;
+
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +25,9 @@ public final class XposedBridge {
 
     private static XposedInterface xposedInterface;
     private static final Map<Member, List<XC_MethodHook>> HOOKS = new ConcurrentHashMap<>();
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss");
+    /** This process's recent module log lines, for the in-app status query's export. */
+    private static final LogRing RECENT = new LogRing(1000);
 
     private XposedBridge() {
     }
@@ -31,6 +38,12 @@ public final class XposedBridge {
 
     public static void log(String text) {
         android.util.Log.i("fcmfix", text);
+        RECENT.add(LocalDateTime.now().format(TIME) + " " + text);
+    }
+
+    /** This process's recent module log lines, oldest first. */
+    public static ArrayList<String> recentLogs() {
+        return RECENT.snapshot();
     }
 
     public static SharedPreferences getRemotePreferences(String group) {

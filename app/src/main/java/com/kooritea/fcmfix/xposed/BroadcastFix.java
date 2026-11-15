@@ -182,6 +182,7 @@ public class BroadcastFix extends XposedModule {
                         }
                         // cos15 unfreeze
                         OplusProxyFix.unfreeze(target);
+                        SelfCheckCollector.recordPush(target);
                     }
                 }
             }

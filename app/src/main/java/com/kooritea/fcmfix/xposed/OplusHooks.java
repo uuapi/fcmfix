@@ -3,11 +3,14 @@ package com.kooritea.fcmfix.xposed;
 import android.content.Intent;
 
 import com.kooritea.fcmfix.libxposed.XposedHelpers;
+import com.kooritea.fcmfix.util.HookStatus;
 
 import java.lang.reflect.Method;
 
 /** Reflection helpers shared by the ColorOS system_server hooks. */
 final class OplusHooks {
+    /** Hook groups installed in this process; reported to the module app on request. */
+    static final HookStatus STATUS = new HookStatus();
 
     private OplusHooks() {
     }
@@ -31,10 +34,13 @@ final class OplusHooks {
     static void runHook(String name, HookAction action) {
         try {
             action.run();
+            STATUS.recordActive(name);
         } catch (NotApplicable e) {
+            STATUS.recordSkipped(name, e.getMessage());
             XposedModule.printLog("hook not applicable " + name + ": " + e.getMessage());
         } catch (Throwable e) {
             String reason = e.getClass().getSimpleName() + ": " + e.getMessage();
+            STATUS.recordFailed(name, reason);
             XposedModule.printLog("hook error " + name + ": " + reason);
         }
     }

@@ -11,6 +11,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.os.UserManager;
 import android.util.Log;
 
@@ -20,8 +21,11 @@ import androidx.core.app.NotificationManagerCompat;
 import com.kooritea.fcmfix.libxposed.XC_MethodHook;
 import com.kooritea.fcmfix.libxposed.XposedBridge;
 import com.kooritea.fcmfix.libxposed.XposedHelpers;
+import com.kooritea.fcmfix.util.DiagnosticLogger;
 import com.kooritea.fcmfix.util.FcmTrust;
+import com.kooritea.fcmfix.util.HookStatus;
 import com.kooritea.fcmfix.util.OplusAttribution;
+import com.kooritea.fcmfix.util.SelfCheck;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -47,6 +51,11 @@ public abstract class XposedModule {
     public static Boolean isBootComplete = false;
     private static Thread loadConfigThread = null;
     private static final Set<String> loggedWarnings = ConcurrentHashMap.newKeySet();
+    protected static final String MODULE_PACKAGE_NAME = "com.kooritea.fcmfix";
+    private static final String ACTION_QUERY_STATUS = MODULE_PACKAGE_NAME + HookStatus.QUERY_ACTION_SUFFIX;
+    private static final DiagnosticLogger diagnosticLogger = new DiagnosticLogger(
+            text -> XposedBridge.log("[fcmfix] " + text),
+            error -> Log.w(TAG, "Diagnostic logging failed; further warnings suppressed", error));
 
     protected XposedModule(final ClassLoader classLoader) {
         this.classLoader = classLoader;
@@ -116,19 +125,8 @@ public abstract class XposedModule {
     }
 
     protected static void printLog(String text, Boolean isDiagnosticsLog) {
-        Log.d(TAG, text);
-        if (isDiagnosticsLog) {
-            Intent log = new Intent("com.kooritea.fcmfix.log");
-            log.putExtra("text", "[" + getSelfPackageName() + "]" + text);
-
-            try {
-                context.sendBroadcast(log);
-            } catch (Throwable e) {
-                XposedBridge.log("[fcmfix] [" + getSelfPackageName() + "]" + text);
-            }
-        } else {
-            XposedBridge.log("[fcmfix] [" + getSelfPackageName() + "]" + text);
-        }
+        diagnosticLogger.log("[" + getSelfPackageName() + "]" + text, isDiagnosticsLog,
+                SystemClock.elapsedRealtime());
     }
 
     protected void checkUserDeviceUnlockAndUpdateConfig() {
@@ -220,18 +218,32 @@ public abstract class XposedModule {
         if (!isInitReceiver && context != null) {
             isInitReceiver = true;
 
+            if ("android".equals(getSelfPackageName())) {
+                FcmConnectionMonitor.start(context);
+            }
+
             IntentFilter updateConfigIntentFilter = new IntentFilter();
             updateConfigIntentFilter.addAction("com.kooritea.fcmfix.update.config");
             if (Build.VERSION.SDK_INT >= 34) {
+                updateConfigIntentFilter.addAction(ACTION_QUERY_STATUS);
                 context.registerReceiver(new BroadcastReceiver() {
-                    public void onReceive(Context context, Intent intent) {
+                    public void onReceive(Context receiverContext, Intent intent) {
                         String action = intent.getAction();
-                        if ("com.kooritea.fcmfix.update.config".equals(action)) {
+                        if ("com.kooritea.fcmfix.update.config".equals(action) && isConfigSender(this)) {
                             onUpdateConfig();
+                        } else if (ACTION_QUERY_STATUS.equals(action) && isOrderedBroadcast() && isConfigSender(this)) {
+                            if (intent.getBooleanExtra(SelfCheck.EXTRA_CHECK, false)
+                                    && "android".equals(getSelfPackageName())) {
+                                answerSelfCheck(goAsync());
+                            } else {
+                                setResultExtras(addHookStatus(getResultExtras(true),
+                                        intent.getBooleanExtra(HookStatus.EXTRA_LOGS, false)));
+                            }
                         }
                     }
                 }, updateConfigIntentFilter, Context.RECEIVER_EXPORTED);
             } else {
+                logOnce("Android 14 以下不支持带身份校验的即时刷新和状态查询；配置修改后需重启生效。");
                 context.registerReceiver(new BroadcastReceiver() {
                     public void onReceive(Context context, Intent intent) {
                         String action = intent.getAction();
@@ -262,6 +274,42 @@ public abstract class XposedModule {
             }, unInstallIntentFilter);
         }
 
+    }
+
+    private static Bundle addHookStatus(Bundle result, boolean logs) {
+        String process = getSelfPackageName();
+        if (logs) result.putByteArray(process + HookStatus.LOGS_SUFFIX, HookStatus.pack(XposedBridge.recentLogs()));
+        result.putStringArrayList(process + HookStatus.ACTIVE_SUFFIX, OplusHooks.STATUS.active());
+        result.putStringArrayList(process + HookStatus.FAILED_SUFFIX, OplusHooks.STATUS.failed());
+        result.putStringArrayList(process + HookStatus.SKIPPED_SUFFIX, OplusHooks.STATUS.skipped());
+        return result;
+    }
+
+    /** Self-check reads other services over Binder; keep it off system_server's main thread. */
+    private static void answerSelfCheck(BroadcastReceiver.PendingResult pending) {
+        new Thread(() -> {
+            try {
+                Bundle extras = addHookStatus(pending.getResultExtras(true), false);
+                try {
+                    SelfCheckCollector.collect(context, allowList, extras);
+                } catch (Throwable e) {
+                    printLog("Self-check failed: " + e);
+                }
+                pending.setResultExtras(extras);
+            } finally {
+                pending.finish();
+            }
+        }, "FCMFix-selfcheck").start();
+    }
+
+    private static boolean isConfigSender(BroadcastReceiver receiver) {
+        if (Build.VERSION.SDK_INT < 34 || context == null) return false;
+        try {
+            return MODULE_PACKAGE_NAME.equals(receiver.getSentFromPackage())
+                    && receiver.getSentFromUid() == context.getPackageManager().getPackageUid(MODULE_PACKAGE_NAME, 0);
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
     protected void sendNotification(String title) {
