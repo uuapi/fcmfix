@@ -399,8 +399,11 @@ fun AppDetailContent(
                 RowDivider()
                 DetailRow(
                     if (check.lastPush > 0) Level.OK else Level.INFO, "推送",
-                    if (check.lastPush == 0L) "还没有收到推送" else pushText(check.lastPush) + " · 共 ${check.pushCount} 次",
-                    null,
+                    if (check.lastPush == 0L) "还没有收到推送"
+                    else pushText(check.lastPush) + " · 共 ${check.pushCount} 次 · 发通知 ${check.notifyCount} 次",
+                    if (check.lastPush > 0 && check.notifyCount == 0L) {
+                        "收到了推送但应用没有发过通知：通知权限、通知类别，或应用本身没做通知"
+                    } else null,
                 )
                 RowDivider()
                 DetailRow(

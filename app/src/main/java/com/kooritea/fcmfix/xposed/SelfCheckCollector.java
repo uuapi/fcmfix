@@ -36,6 +36,7 @@ final class SelfCheckCollector {
     private static final String GMS = "com.google.android.gms";
     private static final int MAX_APPS = 300;
     private static final PushRecords PUSHES = new PushRecords(256);
+    private static final PushRecords NOTIFICATIONS = new PushRecords(256);
 
     private SelfCheckCollector() {
     }
@@ -43,6 +44,11 @@ final class SelfCheckCollector {
     static void recordPush(String packageName) {
         PUSHES.record(packageName, System.currentTimeMillis());
         FcmConnectionMonitor.push(packageName);
+    }
+
+    /** Called from the notification-post hook for allowlisted apps. */
+    static void recordNotification(String packageName) {
+        NOTIFICATIONS.record(packageName, System.currentTimeMillis());
     }
 
     static void collect(Context context, ConfigSnapshot config, Bundle out) {
@@ -107,6 +113,9 @@ final class SelfCheckCollector {
             long[] push = PUSHES.get(name);
             app.putLong(SelfCheck.APP_LAST_PUSH, push == null ? 0 : push[0]);
             app.putLong(SelfCheck.APP_PUSH_COUNT, push == null ? 0 : push[1]);
+            long[] notified = NOTIFICATIONS.get(name);
+            app.putLong(SelfCheck.APP_LAST_NOTIFY, notified == null ? 0 : notified[0]);
+            app.putLong(SelfCheck.APP_NOTIFY_COUNT, notified == null ? 0 : notified[1]);
             out.putBundle(SelfCheck.APP_PREFIX + name, app);
             apps.add(name);
         }

@@ -68,6 +68,8 @@ public final class SelfCheck {
     public static final String APP_RUNNING = "running";
     public static final String APP_LAST_PUSH = "lastPush";
     public static final String APP_PUSH_COUNT = "pushCount";
+    public static final String APP_LAST_NOTIFY = "lastNotify";
+    public static final String APP_NOTIFY_COUNT = "notifyCount";
 
     /** Value of an int key that could not be read on this firmware. */
     public static final int UNKNOWN = -1;

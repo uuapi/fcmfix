@@ -13,6 +13,8 @@ data class ModuleConfig(
     /** FCM apps unticked while auto-allow is on. */
     val excludeList: Set<String> = emptySet(),
     val autoAllowFcm: Boolean = false,
+    /** App-side only: enable notifications for auto-allowed apps that keep them off. */
+    val autoEnableNotify: Boolean = false,
     /** disableAutoCleanNotification */
     val keepNotifications: Boolean = false,
     /** includeIceBoxDisableApp */
@@ -56,6 +58,7 @@ object ConfigStore {
             allowList = pref.getStringSet("allowList", null).orEmpty().toSet(),
             excludeList = pref.getStringSet("excludeList", null).orEmpty().toSet(),
             autoAllowFcm = pref.getBoolean(ConfigSnapshot.AUTO_ALLOW_FCM, false),
+            autoEnableNotify = pref.getBoolean("autoEnableNotify", false),
             keepNotifications = pref.getBoolean("disableAutoCleanNotification", false),
             iceBox = pref.getBoolean("includeIceBoxDisableApp", false),
         )
@@ -71,6 +74,7 @@ object ConfigStore {
             .putStringSet("allowList", HashSet(config.allowList))
             .putStringSet("excludeList", HashSet(config.excludeList))
             .putBoolean(ConfigSnapshot.AUTO_ALLOW_FCM, config.autoAllowFcm)
+            .putBoolean("autoEnableNotify", config.autoEnableNotify)
             .putBoolean("disableAutoCleanNotification", config.keepNotifications)
             .putBoolean("includeIceBoxDisableApp", config.iceBox)
             .commit()

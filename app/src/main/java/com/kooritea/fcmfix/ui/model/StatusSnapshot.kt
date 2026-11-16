@@ -21,6 +21,8 @@ data class AppCheck(
     val stopped: Boolean,
     val lastPush: Long,
     val pushCount: Long,
+    val lastNotify: Long,
+    val notifyCount: Long,
 )
 
 /**
@@ -79,6 +81,8 @@ data class StatusSnapshot(
                     stopped = app.getBoolean(SelfCheck.APP_STOPPED),
                     lastPush = app.getLong(SelfCheck.APP_LAST_PUSH),
                     pushCount = app.getLong(SelfCheck.APP_PUSH_COUNT),
+                    lastNotify = app.getLong(SelfCheck.APP_LAST_NOTIFY),
+                    notifyCount = app.getLong(SelfCheck.APP_NOTIFY_COUNT),
                 )
             }
             return StatusSnapshot(

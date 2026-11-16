@@ -73,6 +73,12 @@ fun SettingsScreen(
                     )
                     RowDivider()
                     SwitchRow(
+                        R.drawable.ic_notifications, "自动放行时开启通知",
+                        "自动放行的应用若通知已关闭，自动代为开启；手动关闭过的应用不会被反复打开",
+                        config?.autoEnableNotify == true, editable, actions::setAutoEnableNotify,
+                    )
+                    RowDivider()
+                    SwitchRow(
                         R.drawable.ic_icebox, "允许唤醒被冰箱冻结的应用",
                         "推送到达时通过冰箱 SDK 解冻应用。触发解冻的这条消息可能收不到，要等下一条消息或应用自己同步",
                         config?.iceBox == true, editable, actions::setIceBox,

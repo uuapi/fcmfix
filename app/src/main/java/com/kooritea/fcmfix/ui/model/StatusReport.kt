@@ -308,13 +308,17 @@ class StatusReport private constructor(
                 var label = env.label(name)
                 if (app.auto) label += "（自动）"
                 val pushes = if (app.lastPush == 0L) "开机以来还没有收到推送"
-                else env.relativeTime(app.lastPush) + "收到推送 · 开机以来 " + app.pushCount + " 次"
+                else env.relativeTime(app.lastPush) + "收到推送 · 开机以来 " + app.pushCount +
+                        " 次 · 发通知 " + app.notifyCount + " 次"
                 val process = when {
                     app.running -> "运行中"
                     app.stopped -> "已停止，推送时由模块拉起"
                     else -> "未运行"
                 }
-                val detail = (verdict.text?.let { it + "\n" } ?: "") + pushes + " · " + process
+                var detail = (verdict.text?.let { it + "\n" } ?: "") + pushes + " · " + process
+                if (app.lastPush > 0L && app.notifyCount == 0L) {
+                    detail += "\n收到推送但应用没有发过通知：检查通知权限、通知类别，或应用本身没做通知"
+                }
                 // Only a fully disabled app counts in the summary; a muted channel is often deliberate.
                 val row = Row(
                     RowKind.CHECK, page, verdict.level, label, detail, verdict.hint, RowAction.AppDetails(name),

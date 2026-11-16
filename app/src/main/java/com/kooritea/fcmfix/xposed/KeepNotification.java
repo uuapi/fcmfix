@@ -17,6 +17,43 @@ public class KeepNotification extends XposedModule{
         } catch (Throwable e) {
             printLog("No Such Method com.android.server.notification.NotificationManagerService.cancelAllNotificationsInt");
         }
+        try {
+            this.recordNotificationPosts();
+        } catch (Throwable e) {
+            printLog("hook error notification posts: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Counts non-foreground notification posts of allowlisted apps, so the app can pair them
+     * with push records: "收到推送但没有发通知" then points at the app itself, not delivery.
+     */
+    protected void recordNotificationPosts() throws NoSuchMethodError, XposedHelpers.ClassNotFoundError {
+        Class<?> clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerService", classLoader);
+        Method targetMethod = null;
+        for (Method method : clazz.getDeclaredMethods()) {
+            if ("enqueueNotificationInternal".equals(method.getName())
+                    && method.getParameterTypes().length >= 8
+                    && method.getParameterTypes()[0] == String.class) {
+                targetMethod = method;
+            }
+        }
+        if (targetMethod == null) throw new NoSuchMethodError("enqueueNotificationInternal");
+        XposedBridge.hookMethod(targetMethod, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                if (!isBootComplete) return;
+                if (!(param.args[0] instanceof String)) return;
+                // Foreground-service notifications are not push notifications; skip them.
+                Object last = param.args[param.args.length - 1];
+                if (last instanceof Boolean && (Boolean) last) return;
+                String pkg = (String) param.args[0];
+                if (targetIsAllow(pkg)) {
+                    SelfCheckCollector.recordNotification(pkg);
+                }
+            }
+        });
+        printLog("Notification post recording active: " + targetMethod.getName());
     }
     
     protected void startHook() throws NoSuchMethodError, XposedHelpers.ClassNotFoundError {

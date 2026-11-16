@@ -130,6 +130,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
 
     private var refreshJob: Job? = null
     private var delayedRefresh: Job? = null
+    private val autoNotifyRequested = mutableSetOf<String>()
 
     init {
         ModuleConnection.start()
@@ -165,7 +166,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
             try {
                 val bundle = StatusQuery.query(app)
                 val local = mutableConfig.value?.let { LocalConfig(it.allowList.size, it.autoAllowFcm) }
-                answer.value = Answer(StatusSnapshot.from(bundle), local)
+                val snapshot = StatusSnapshot.from(bundle)
+                answer.value = Answer(snapshot, local)
+                sweepAutoEnableNotify(snapshot)
             } finally {
                 mutableRefreshing.value = false
             }
@@ -234,6 +237,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
         updateConfig { it.withAllowed(target.packageName, target.includeFcm, allowed) }
 
     override fun setAutoAllow(enabled: Boolean) = updateConfig { it.copy(autoAllowFcm = enabled) }
+
+    override fun setAutoEnableNotify(enabled: Boolean) {
+        // Re-sweep from scratch when the switch is turned on again.
+        if (enabled) autoNotifyRequested.clear()
+        updateConfig { it.copy(autoEnableNotify = enabled) }
+    }
+
+    /**
+     * "自动放行时开启通知": after every status answer, request ON for auto-allowed apps whose
+     * notifications are off. One request per app per session; the debounced re-query shows the
+     * new state, and a later manual switch-off by the user is respected.
+     */
+    private fun sweepAutoEnableNotify(snapshot: StatusSnapshot) {
+        if (mutableConfig.value?.autoEnableNotify != true) return
+        if (Build.VERSION.SDK_INT < 34) return
+        for ((name, check) in snapshot.appChecks) {
+            if (!check.auto || check.notify != 0) continue
+            if (!autoNotifyRequested.add(name)) continue
+            try {
+                app.sendBroadcast(
+                    Intent(app.packageName + ".enable.notify").putExtra("pkg", name), null,
+                    BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle(),
+                )
+            } catch (e: Throwable) {
+                Log.e(TAG, "autoEnableNotify", e)
+                autoNotifyRequested.remove(name)
+            }
+        }
+    }
 
     override fun setKeepNotifications(enabled: Boolean) = updateConfig { it.copy(keepNotifications = enabled) }
 
