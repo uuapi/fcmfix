@@ -2,8 +2,10 @@ package com.kooritea.fcmfix.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -13,6 +15,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.kooritea.fcmfix.util.SelfCheck.EventKind
 import com.kooritea.fcmfix.util.SelfCheck.Level
@@ -103,6 +106,15 @@ private val StatusDark = StatusColors(Color(0xFF4ADE80), Color(0xFFFBBF24), Colo
 
 val LocalStatusColors = staticCompositionLocalOf { StatusLight }
 
+/** Expressive 形状体系：整体放大圆角，卡片 28dp、瓦片 24dp。 */
+private val ExpressiveShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+)
+
 /** Wallpaper colours on Android 12 and later. */
 @Composable
 fun FcmFixTheme(
@@ -119,7 +131,7 @@ fun FcmFixTheme(
         else -> IndigoLight
     }
     CompositionLocalProvider(LocalStatusColors provides if (darkTheme) StatusDark else StatusLight) {
-        MaterialTheme(colorScheme = colorScheme, content = content)
+        MaterialTheme(colorScheme = colorScheme, shapes = ExpressiveShapes, content = content)
     }
 }
 

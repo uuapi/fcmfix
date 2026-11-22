@@ -3,9 +3,11 @@ package com.kooritea.fcmfix.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -72,7 +74,13 @@ fun blocks(rows: List<Row>): List<Block> {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatusTab(state: AppUiState, actions: AppActions, nav: Navigation, modifier: Modifier = Modifier) {
+fun StatusTab(
+    state: AppUiState,
+    actions: AppActions,
+    nav: Navigation,
+    modifier: Modifier = Modifier,
+    onOpenTab: (Tab) -> Unit = {},
+) {
     val report = state.report
     TabScaffold(
         title = { Text("FCMFix") },
@@ -90,6 +98,40 @@ fun StatusTab(state: AppUiState, actions: AppActions, nav: Navigation, modifier:
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 item { SummaryCard(if (state.loading) null else report?.summary()) }
                 if (report == null || state.loading) return@LazyColumn
+                item {
+                    val tiles = report.summaryTiles()
+                    Column(
+                        Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        tiles.chunked(2).forEach { rowTiles ->
+                            Row(
+                                Modifier.height(IntrinsicSize.Min),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                rowTiles.forEach { tile ->
+                                    BentoTile(
+                                        label = tile.label,
+                                        value = tile.value,
+                                        detail = tile.detail,
+                                        level = tile.level,
+                                        onClick = tile.page?.let { page ->
+                                            {
+                                                when (page) {
+                                                    Page.APPS -> onOpenTab(Tab.APPS)
+                                                    Page.EVENTS -> onOpenTab(Tab.TIMELINE)
+                                                    else -> {}
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                                    )
+                                }
+                                if (rowTiles.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
                 for (block in blocks(report.rows(Page.OVERVIEW))) {
                     when (block) {
                         is Block.Header -> item { SectionHeader(block.title) }
@@ -125,17 +167,17 @@ fun SummaryCard(summary: Summary?, modifier: Modifier = Modifier) {
         shape = CardShape,
         colors = CardDefaults.cardColors(containerColor = tint.compositeOver(MaterialTheme.colorScheme.surfaceBright)),
     ) {
-        Row(Modifier.padding(20.dp), verticalAlignment = Alignment.Top) {
+        Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
             if (summary == null) {
-                CircularProgressIndicator(Modifier.size(48.dp).padding(6.dp), strokeWidth = 3.dp)
+                CircularProgressIndicator(Modifier.size(52.dp).padding(4.dp), strokeWidth = 3.dp)
             } else {
-                LevelIcon(level, size = 48.dp)
+                LevelIcon(level, size = 52.dp)
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(18.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     summary?.title ?: "正在检查…",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 summary?.detail?.let {

@@ -3,14 +3,18 @@ package com.kooritea.fcmfix.ui
 import android.text.format.DateUtils
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row as LayoutRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -30,8 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kooritea.fcmfix.R
@@ -47,7 +53,10 @@ val LocalRelativeTime = staticCompositionLocalOf<(Long) -> String> {
     { time -> DateUtils.getRelativeTimeSpanString(time).toString() }
 }
 
-val CardShape = RoundedCornerShape(20.dp)
+val CardShape = RoundedCornerShape(28.dp)
+
+/** Bento 瓦片圆角。 */
+val TileShape = RoundedCornerShape(24.dp)
 
 fun levelIcon(level: Level): Int = when (level) {
     Level.OK -> R.drawable.ic_level_ok
@@ -170,9 +179,74 @@ fun Pill(text: String, container: Color, content: Color, modifier: Modifier = Mo
  * corners, the last the bottom ones.
  */
 fun Modifier.groupItem(index: Int, count: Int, color: Color): Modifier {
-    val top = if (index == 0) 20.dp else 0.dp
-    val bottom = if (index == count - 1) 20.dp else 0.dp
+    val top = if (index == 0) 24.dp else 0.dp
+    val bottom = if (index == count - 1) 24.dp else 0.dp
     return padding(horizontal = 16.dp)
         .clip(RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom))
         .background(color)
+}
+
+/**
+ * Bento 仪表盘的一个指标瓦片：状态色淡染背景 + 等级图标 + 大字值。
+ * onClick 非空时整块可点（跳转到对应页签）。
+ */
+@Composable
+fun BentoTile(
+    label: String,
+    value: String,
+    detail: String?,
+    level: Level,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val tint = levelColor(level).copy(alpha = 0.10f)
+    val container = tint.compositeOver(MaterialTheme.colorScheme.surfaceBright)
+    Box(
+        modifier
+            .heightIn(min = 116.dp)
+            .clip(TileShape)
+            .background(container)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Column {
+            LayoutRow(verticalAlignment = Alignment.CenterVertically) {
+                LevelIcon(level, size = 22.dp)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            detail?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (onClick != null) {
+            Icon(
+                painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.BottomEnd).size(16.dp),
+            )
+        }
+    }
 }

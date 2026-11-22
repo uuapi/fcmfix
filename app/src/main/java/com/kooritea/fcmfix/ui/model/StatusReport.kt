@@ -69,6 +69,15 @@ class ReportEnv(
 /** The top of the status tab: the first problem, or the FCM connection when all is well. */
 data class Summary(val level: Level, val title: String, val detail: String?, val footer: String?)
 
+/** Bento 仪表盘的一个指标瓦片；page 非空时点击跳转到对应页签。 */
+data class SummaryTile(
+    val label: String,
+    val value: String,
+    val detail: String?,
+    val level: Level,
+    val page: Page?,
+)
+
 /** Notification and standby-bucket verdicts of an allowed app; level is the worse of the two. */
 class AppVerdict private constructor(val level: Level, val notify: Verdict, val bucket: Verdict?) {
     /** What the app row shows besides pushes, or null when all is well. */
@@ -110,6 +119,69 @@ class StatusReport private constructor(
     val problems: List<Row> get() = rows.filter { it.problem }
 
     fun rows(page: Page): List<Row> = rows.filter { it.page == page }
+
+    /**
+     * Bento 仪表盘瓦片：FCM 连接、放行应用、系统框架 Hook、配置同步四个关键指标。
+     * 详细的检查行仍保留在 OVERVIEW 页，瓦片只做快速概览。
+     */
+    fun summaryTiles(): List<SummaryTile> {
+        val fcm = status.fcmVerdict(env.now)
+        val fcmLines = fcm.text.split("\n")
+
+        val apps = status.apps
+        var attention = 0
+        var failedApps = 0
+        if (apps != null) {
+            for (name in apps) {
+                val check = status.appChecks[name] ?: continue
+                val verdict = AppVerdict.of(check)
+                if (verdict.attention) {
+                    attention++
+                    if (verdict.level == Level.FAIL) failedApps++
+                }
+            }
+        }
+        val appsLevel = when {
+            apps == null -> Level.UNKNOWN
+            failedApps > 0 -> Level.FAIL
+            attention > 0 -> Level.WARN
+            else -> Level.OK
+        }
+        val appsDetail = when {
+            apps == null -> "系统框架没有响应"
+            attention > 0 -> "其中 $attention 个需要注意"
+            else -> null
+        }
+
+        val (active, failed, skipped) = status.hooks(StatusSnapshot.PROCESSES.first().first)
+        val hookLevel = when {
+            active == null || failed == null -> Level.FAIL
+            failed.isNotEmpty() -> Level.WARN
+            else -> Level.OK
+        }
+        val hookValue = when {
+            active == null || failed == null -> "未加载"
+            failed.isNotEmpty() -> "${active.size} 生效 · ${failed.size} 失配"
+            else -> "${active.size} 项生效"
+        }
+        val hookDetail = when {
+            active == null || failed == null -> "确认已勾选作用域并重启手机"
+            failed.isNotEmpty() -> "与当前固件签名不匹配，保持系统原行为"
+            skipped != null && skipped.isNotEmpty() -> "${skipped.size} 项不适用"
+            else -> null
+        }
+
+        val sync = env.localConfig?.let {
+            SelfCheck.configSync(status.configLoaded, status.manualCount, status.autoAllow, it.manualCount, it.autoAllow)
+        }
+
+        return listOf(
+            SummaryTile("FCM 连接", fcmLines.firstOrNull() ?: "", fcmLines.getOrNull(1) ?: fcm.hint, fcm.level, Page.EVENTS),
+            SummaryTile("放行应用", "${apps?.size ?: 0} 个", appsDetail, appsLevel, Page.APPS),
+            SummaryTile("系统框架 Hook", hookValue, hookDetail, hookLevel, null),
+            SummaryTile("配置同步", sync?.text ?: "无法读取", sync?.hint, sync?.level ?: Level.UNKNOWN, null),
+        )
+    }
 
     fun summary(): Summary {
         val problems = problems

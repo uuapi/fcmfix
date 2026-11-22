@@ -5,11 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -169,10 +172,24 @@ private fun EventItem(row: Row, index: Int, count: Int) {
         else -> MaterialTheme.colorScheme.onSurface
     }
     Row(
-        Modifier.groupItem(index, count, MaterialTheme.colorScheme.surfaceBright)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.Top,
+        Modifier
+            .height(IntrinsicSize.Min)
+            .groupItem(index, count, MaterialTheme.colorScheme.surfaceBright)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        // 时间轴：圆点上下由连接线串起当天的事件
+        Box(Modifier.width(20.dp).fillMaxHeight()) {
+            val rail = MaterialTheme.colorScheme.outlineVariant
+            if (index > 0) {
+                Box(Modifier.align(Alignment.TopCenter).fillMaxHeight(0.5f).width(2.dp).background(rail))
+            }
+            if (index < count - 1) {
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxHeight(0.5f).width(2.dp).background(rail))
+            }
+            Box(Modifier.align(Alignment.Center).size(8.dp).clip(CircleShape).background(color))
+        }
+        Spacer(Modifier.width(10.dp))
         Text(
             row.title,
             Modifier.widthIn(min = 64.dp),
@@ -180,8 +197,6 @@ private fun EventItem(row: Row, index: Int, count: Int) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             softWrap = false,
         )
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.padding(top = 6.dp).size(8.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(12.dp))
         Text(row.detail, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = textColor)
     }

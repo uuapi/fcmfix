@@ -11,19 +11,36 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -31,11 +48,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -52,10 +68,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
@@ -286,42 +304,31 @@ fun FcmFixScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             val attention = remember(state) { appItems(state).count { it.attention } }
-            NavigationBar {
-                NavigationBarItem(
-                    selected = tab == Tab.STATUS,
-                    onClick = { tab = Tab.STATUS },
-                    icon = {
-                        Icon(
-                            painterResource(if (tab == Tab.STATUS) R.drawable.ic_nav_status_filled else R.drawable.ic_nav_status),
-                            contentDescription = null,
-                        )
-                    },
-                    label = { Text("状态") },
-                )
-                NavigationBarItem(
-                    selected = tab == Tab.APPS,
-                    onClick = { tab = Tab.APPS },
-                    icon = {
-                        BadgedBox(badge = { if (attention > 0) Badge { Text("$attention") } }) {
-                            Icon(painterResource(R.drawable.ic_nav_apps), contentDescription = null)
-                        }
-                    },
-                    label = { Text("应用") },
-                )
-                NavigationBarItem(
-                    selected = tab == Tab.TIMELINE,
-                    onClick = { tab = Tab.TIMELINE },
-                    icon = { Icon(painterResource(R.drawable.ic_nav_timeline), contentDescription = null) },
-                    label = { Text("时间线") },
-                )
-            }
-        },
+            FloatingNavBar(tab, onSelect = { tab = it }, attention = attention)
+        }
     ) { padding ->
         val modifier = Modifier.padding(padding)
-        when (tab) {
-            Tab.STATUS -> StatusTab(state, actions, nav, modifier)
-            Tab.APPS -> AppsTab(state, actions, nav, modifier)
-            Tab.TIMELINE -> TimelineTab(state, actions, nav, modifier)
+        AnimatedContent(
+            targetState = tab,
+            transitionSpec = {
+                val forward = targetState.ordinal >= initialState.ordinal
+                (
+                    slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) { full ->
+                        if (forward) full / 3 else -full / 3
+                    } + fadeIn(tween(240))
+                    ) togetherWith (
+                    slideOutHorizontally(tween(180)) { full ->
+                        if (forward) -full / 4 else full / 4
+                    } + fadeOut(tween(160))
+                    )
+            },
+            label = "tabContent",
+        ) { current ->
+            when (current) {
+                Tab.STATUS -> StatusTab(state, actions, nav, modifier, onOpenTab = { tab = it })
+                Tab.APPS -> AppsTab(state, actions, nav, modifier)
+                Tab.TIMELINE -> TimelineTab(state, actions, nav, modifier)
+            }
         }
     }
 
@@ -329,6 +336,96 @@ fun FcmFixScreen(
         // Gone after a rescan if the app was uninstalled meanwhile.
         val item = remember(state, packageName) { appItems(state).firstOrNull { it.app.packageName == packageName } }
         if (item != null) AppDetailSheet(item, state, actions, nav, onDismiss = { detail = null })
+    }
+}
+
+/** 浮动胶囊导航：悬浮于底部，选中项展开为药丸形高亮，切换带弹性动效。 */
+@Composable
+private fun FloatingNavBar(tab: Tab, onSelect: (Tab) -> Unit, attention: Int) {
+    Box(
+        Modifier.fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 28.dp, vertical = 10.dp),
+    ) {
+        Surface(
+            modifier = Modifier.align(Alignment.Center),
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            shadowElevation = 8.dp,
+        ) {
+            Row(
+                Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                NavItem(
+                    selected = tab == Tab.STATUS,
+                    label = "状态",
+                    icon = if (tab == Tab.STATUS) R.drawable.ic_nav_status_filled else R.drawable.ic_nav_status,
+                ) { onSelect(Tab.STATUS) }
+                NavItem(
+                    selected = tab == Tab.APPS,
+                    label = "应用",
+                    icon = R.drawable.ic_nav_apps,
+                    badge = attention,
+                ) { onSelect(Tab.APPS) }
+                NavItem(
+                    selected = tab == Tab.TIMELINE,
+                    label = "时间线",
+                    icon = R.drawable.ic_nav_timeline,
+                ) { onSelect(Tab.TIMELINE) }
+            }
+        }
+    }
+}
+
+/** 导航栏的单个条目：选中时容器染上主色并展开文字标签。 */
+@Composable
+private fun NavItem(
+    selected: Boolean,
+    label: String,
+    icon: Int,
+    badge: Int = 0,
+    onClick: () -> Unit,
+) {
+    val container by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "navItemContainer",
+    )
+    val contentColor = if (selected) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    }
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(container)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (badge > 0 && !selected) {
+                BadgedBox(badge = { Badge { Text(badge.toString()) } }) {
+                    Icon(painterResource(icon), contentDescription = label, tint = contentColor)
+                }
+            } else {
+                Icon(painterResource(icon), contentDescription = label, tint = contentColor)
+            }
+            AnimatedVisibility(
+                visible = selected,
+                enter = expandHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                exit = shrinkHorizontally(tween(150)) + fadeOut(),
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = contentColor,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
     }
 }
 
