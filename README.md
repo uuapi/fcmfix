@@ -8,7 +8,7 @@
 [![LSPosed](https://img.shields.io/badge/LSPosed-libxposed%20API%20102-4338CA?logo=x)](#构建)
 [![UI](https://img.shields.io/badge/UI-Compose%20Material%203-7F52FF?logo=jetpackcompose&logoColor=white)](#界面)
 [![minSdk](https://img.shields.io/badge/minSdk-29-blue)](app/build.gradle)
-[![Version](https://img.shields.io/badge/versionCode-59-orange)](app/build.gradle)
+[![Version](https://img.shields.io/badge/versionCode-60-orange)](app/build.gradle)
 [![License](https://img.shields.io/badge/license-MIT-05A14E)](LICENSE)
 
 *基于 [kooritea/fcmfix](https://github.com/kooritea/fcmfix) · 参考 [FCMFix ColorOS](https://github.com/Artifical0/fcmfix-oneplus15-coloros16) · 独立签名维护*
