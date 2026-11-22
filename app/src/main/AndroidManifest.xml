@@ -7,8 +7,8 @@
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="com.catchingnow.icebox.SDK" />
-    <uses-permission android:name="web1n.stopapp.permission.disable_api" />
+    <!-- Read by system_server only (sock_diag network callbacks); never granted to the app itself. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"

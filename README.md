@@ -8,7 +8,7 @@
 [![LSPosed](https://img.shields.io/badge/LSPosed-libxposed%20API%20102-4338CA?logo=x)](#构建)
 [![UI](https://img.shields.io/badge/UI-Compose%20Material%203-7F52FF?logo=jetpackcompose&logoColor=white)](#界面)
 [![minSdk](https://img.shields.io/badge/minSdk-29-blue)](app/build.gradle)
-[![Version](https://img.shields.io/badge/versionCode-57-orange)](app/build.gradle)
+[![Version](https://img.shields.io/badge/versionCode-59-orange)](app/build.gradle)
 [![License](https://img.shields.io/badge/license-MIT-05A14E)](LICENSE)
 
 *基于 [kooritea/fcmfix](https://github.com/kooritea/fcmfix) · 参考 [FCMFix ColorOS](https://github.com/Artifical0/fcmfix-oneplus15-coloros16) · 独立签名维护*
@@ -147,7 +147,7 @@ Jetpack Compose + Material 3 全新实现（参考 ColorOS 版设计语言）：
 | **状态** | 顶部结论卡（首项问题或 FCM 连接判定）→ 模块/hook 组状态（生效 / 失配 / 不适用，**失配原因逐条列出**）→ 配置同步 → FCM 连接（sock_diag 实时判定：重传卡死 / 静默超时 / 断线史）→ GMS 联网策略、待机分组、电池优化白名单 → 反馈（复制结果 / Root 导出完整报告） |
 | **应用** | 搜索 + 筛选 chips（全部 / 包含 FCM / 已放行 / 需要注意）；**自动放行开关**（放行 + excludeList 排除语义，新装应用自动纳入）；放行开关；每行显示 FCM / 自动放行徽标、待处理问题或最近推送；详情弹层含通知 / 待机分组 / 推送次数 / 进程状态 |
 | **时间线** | 亮灭屏、深度 Doze、网络切换、FCM 连接变化、推送事件按天分组（sticky header），按类型筛选着色 |
-| **设置** | 阻止停止时清除通知、允许唤醒冰箱冻结应用、放行所有包含 FCM 的应用、关于 |
+| **设置** | 阻止停止时清除通知、放行所有包含 FCM 的应用、关于 |
 
 ### 诊断后端
 

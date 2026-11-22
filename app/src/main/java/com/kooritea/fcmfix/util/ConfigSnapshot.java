@@ -20,7 +20,7 @@ public final class ConfigSnapshot {
         allowList = packageSet(values, "allowList");
         excludeList = packageSet(values, "excludeList");
         Map<String, Boolean> flags = new HashMap<>();
-        for (String key : new String[]{"disableAutoCleanNotification", "includeIceBoxDisableApp", AUTO_ALLOW_FCM}) {
+        for (String key : new String[]{"disableAutoCleanNotification", AUTO_ALLOW_FCM}) {
             Object value = values.get(key);
             if (value != null && !(value instanceof Boolean)) throw new IllegalArgumentException("Invalid " + key);
             flags.put(key, Boolean.TRUE.equals(value));

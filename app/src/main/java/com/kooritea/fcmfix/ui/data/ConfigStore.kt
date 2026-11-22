@@ -17,8 +17,6 @@ data class ModuleConfig(
     val autoEnableNotify: Boolean = false,
     /** disableAutoCleanNotification */
     val keepNotifications: Boolean = false,
-    /** includeIceBoxDisableApp */
-    val iceBox: Boolean = false,
 ) {
     /** Same rule as ConfigSnapshot.allows in system_server. */
     fun allows(packageName: String, includeFcm: Boolean): Boolean =
@@ -60,7 +58,6 @@ object ConfigStore {
             autoAllowFcm = pref.getBoolean(ConfigSnapshot.AUTO_ALLOW_FCM, false),
             autoEnableNotify = pref.getBoolean("autoEnableNotify", false),
             keepNotifications = pref.getBoolean("disableAutoCleanNotification", false),
-            iceBox = pref.getBoolean("includeIceBoxDisableApp", false),
         )
     }
 
@@ -76,7 +73,6 @@ object ConfigStore {
             .putBoolean(ConfigSnapshot.AUTO_ALLOW_FCM, config.autoAllowFcm)
             .putBoolean("autoEnableNotify", config.autoEnableNotify)
             .putBoolean("disableAutoCleanNotification", config.keepNotifications)
-            .putBoolean("includeIceBoxDisableApp", config.iceBox)
             .commit()
         check(saved) { "配置写入失败" }
         if (Build.VERSION.SDK_INT < 34) return false

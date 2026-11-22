@@ -269,8 +269,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
 
     override fun setKeepNotifications(enabled: Boolean) = updateConfig { it.copy(keepNotifications = enabled) }
 
-    override fun setIceBox(enabled: Boolean) = updateConfig { it.copy(iceBox = enabled) }
-
     override fun allowAllFcm() {
         val fcm = apps.value?.filter { it.includeFcm }?.map { it.packageName } ?: return
         updateConfig { it.copy(allowList = it.allowList + fcm) }

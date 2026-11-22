@@ -94,7 +94,6 @@ interface AppActions {
     fun setAutoAllow(enabled: Boolean)
     fun setAutoEnableNotify(enabled: Boolean)
     fun setKeepNotifications(enabled: Boolean)
-    fun setIceBox(enabled: Boolean)
     fun allowAllFcm()
     fun enableNotifications(packageName: String)
     fun requestScope(scopes: List<String>)
@@ -110,7 +109,6 @@ interface AppActions {
         override fun setAutoAllow(enabled: Boolean) = Unit
         override fun setAutoEnableNotify(enabled: Boolean) = Unit
         override fun setKeepNotifications(enabled: Boolean) = Unit
-        override fun setIceBox(enabled: Boolean) = Unit
         override fun allowAllFcm() = Unit
         override fun enableNotifications(packageName: String) = Unit
         override fun requestScope(scopes: List<String>) = Unit
