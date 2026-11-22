@@ -1,19 +1,13 @@
 package com.kooritea.fcmfix.util;
 
-/** Trust is private to the synchronous framework invocation, never stored in Intent extras. */
+/**
+ * Sender and action checks for the delivery trust model. Trust is derived per invocation from
+ * the framework's own records (BroadcastRecord / known parameter signatures), never from
+ * Intent extras or ambient per-thread state.
+ */
 public final class FcmTrust {
     public static final String RECEIVE = "com.google.android.c2dm.intent.RECEIVE";
     public static final String TASK_READY = "com.google.android.gms.gcm.ACTION_TASK_READY";
-    private static final ThreadLocal<Context> CURRENT = new ThreadLocal<>();
-
-    private static final class Context {
-        final String target;
-        final int callerUid;
-        Context(String target, int callerUid) {
-            this.target = target;
-            this.callerUid = callerUid;
-        }
-    }
 
     private FcmTrust() {}
 
@@ -36,10 +30,6 @@ public final class FcmTrust {
                 || "com.google.firebase.INSTANCE_ID_EVENT".equals(action);
     }
 
-    public static boolean allowsEntry(String action, String target, boolean allowed, boolean gms) {
-        return RECEIVE.equals(action) && target != null && !target.isEmpty() && allowed && gms;
-    }
-
     public static boolean allowsService(String action, boolean gms, boolean selfInWindow,
                                         boolean gcmBind) {
         if (TASK_READY.equals(action)) return gcmBind && gms;
@@ -53,20 +43,5 @@ public final class FcmTrust {
         }
         String target = componentPackage == null ? packageName : componentPackage;
         return target == null || target.isEmpty() ? null : target;
-    }
-
-    public static Runnable enter(String target, int callerUid) {
-        Context previous = CURRENT.get();
-        if (target == null || callerUid < 10000) CURRENT.remove();
-        else CURRENT.set(new Context(target, callerUid));
-        return () -> {
-            if (previous == null) CURRENT.remove(); else CURRENT.set(previous);
-        };
-    }
-
-    public static boolean matches(String action, String target) {
-        Context current = CURRENT.get();
-        return RECEIVE.equals(action) && target != null && current != null
-                && current.callerUid >= 10000 && target.equals(current.target);
     }
 }

@@ -182,7 +182,9 @@ public abstract class XposedModule {
                         }
                         ConfigSnapshot loaded = new ConfigSnapshot(remotePreferences.getAll());
                         config = loaded;
-                        if (loaded.autoAllowFcm() && "android".equals(getSelfPackageName())) {
+                        // Every hooked process consults targetIsAllow; scan in each of them, not
+                        // only system_server, so auto-allow also works in scoped app processes.
+                        if (loaded.autoAllowFcm()) {
                             FcmPackages.ensureScanned(context);
                         }
                         if ("android".equals(getSelfPackageName())) {
@@ -214,19 +216,22 @@ public abstract class XposedModule {
 
             if ("android".equals(getSelfPackageName())) {
                 FcmConnectionMonitor.start(context);
-                IntentFilter packageFilter = new IntentFilter();
-                packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
-                packageFilter.addAction(Intent.ACTION_PACKAGE_CHANGED);
-                packageFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
-                packageFilter.addDataScheme("package");
-                context.registerReceiver(new BroadcastReceiver() {
-                    public void onReceive(Context receiverContext, Intent intent) {
-                        if (intent.getData() != null) {
-                            FcmPackages.onPackageChanged(receiverContext, intent.getData().getSchemeSpecificPart());
-                        }
-                    }
-                }, packageFilter);
             }
+
+            // Protected system broadcasts; no export flag needed. Kept current in every hooked
+            // process so each one's FcmPackages set tracks installs and removals.
+            IntentFilter packageFilter = new IntentFilter();
+            packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+            packageFilter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+            packageFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+            packageFilter.addDataScheme("package");
+            context.registerReceiver(new BroadcastReceiver() {
+                public void onReceive(Context receiverContext, Intent intent) {
+                    if (intent.getData() != null) {
+                        FcmPackages.onPackageChanged(receiverContext, intent.getData().getSchemeSpecificPart());
+                    }
+                }
+            }, packageFilter);
 
             IntentFilter updateConfigIntentFilter = new IntentFilter();
             updateConfigIntentFilter.addAction("com.kooritea.fcmfix.update.config");
@@ -476,8 +481,10 @@ public abstract class XposedModule {
                     return trusted;
                 }
             }
-            // Only the synchronous broadcast path may inherit the verified entry context.
-            return FcmTrust.matches(intent.getAction(), target);
+            // No BroadcastRecord argument and no known attribution signature: fail closed.
+            // (This line is only reachable for methods hooked without either verification path.)
+            logOnce("Unverified delivery attribution, refusing bypass: " + param.method);
+            return false;
         } catch (Throwable error) {
             logOnce("Unsupported delivery attribution: " + param.method + ": " + error);
             return false;
