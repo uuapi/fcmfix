@@ -35,7 +35,11 @@ public class KeepNotification extends XposedModule{
             if ("enqueueNotificationInternal".equals(method.getName())
                     && method.getParameterTypes().length >= 8
                     && method.getParameterTypes()[0] == String.class) {
-                targetMethod = method;
+                // Prefer the widest overload: it carries the full AOSP parameter set.
+                if (targetMethod == null
+                        || method.getParameterTypes().length > targetMethod.getParameterTypes().length) {
+                    targetMethod = method;
+                }
             }
         }
         if (targetMethod == null) throw new NoSuchMethodError("enqueueNotificationInternal");

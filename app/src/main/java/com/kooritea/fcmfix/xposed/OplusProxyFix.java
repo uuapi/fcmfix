@@ -85,6 +85,14 @@ public class OplusProxyFix extends XposedModule {
         XposedUtils.findAndHookMethod(oplusProxyBroadcastClass, "shouldProxy", 8, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                // The 8-arg shape was verified on OnePlus 13T ColorOS 15; on other firmware the
+                // positions may hold other types. Fail closed instead of casting garbage.
+                if (param.args.length < 8
+                        || !(param.args[3] instanceof String)
+                        || !(param.args[5] instanceof String)
+                        || !(param.args[6] instanceof String)) {
+                    return;
+                }
                 String callingPkg = (String)param.args[3];
                 String pkgName = (String)param.args[5];
                 String action = (String)param.args[6];
