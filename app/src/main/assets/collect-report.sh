@@ -9,7 +9,7 @@ else
 fi
 [ $# -gt 0 ] && shift
 GMS=com.google.android.gms
-MODULE=io.github.artifical0.fcmfix.coloros
+MODULE=com.kooritea.fcmfix
 
 section() { echo; echo "== $1"; }
 
@@ -124,8 +124,8 @@ report() {
   fi | grep -iE "gcm|mcs|heartbeat|connect" | tail -n 150
 
   section "FCMFix / ColorOS Google 限制日志"
-  # Match the module's "[fcmfix]" prefix, not the package name io.github.artifical0.fcmfix.coloros,
-  # which window-manager logs mention all the time.
+  # Match the module's "[fcmfix]" prefix, not the package name com.kooritea.fcmfix,
+  # which window-manager logs may mention all the time.
   logcat -d | grep -E "\[fcmfix\]|GoogleController|OplusGoogle"
 
   # For "GMS sent the broadcast but no notification": whether the target was started, frozen or

@@ -12,6 +12,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.provider.Settings;
 
 import com.kooritea.fcmfix.util.ConfigSnapshot;
@@ -35,6 +36,12 @@ import java.util.TreeSet;
 final class SelfCheckCollector {
     private static final String GMS = "com.google.android.gms";
     private static final int MAX_APPS = 300;
+    /**
+     * Time budget for the per-app binder queries. The answer crosses an ordered broadcast with
+     * a ~10 s per-receiver window (answerSelfCheck uses goAsync); leave room for the GMS checks
+     * and the sock_diag sample that run first, and report what was collected when over budget.
+     */
+    private static final long APP_QUERY_BUDGET_MS = 7_000;
     private static final PushRecords PUSHES = new PushRecords(256);
     private static final PushRecords NOTIFICATIONS = new PushRecords(256);
 
@@ -93,8 +100,14 @@ final class SelfCheckCollector {
         Set<String> running = runningPackages(context);
         Object notifications = notificationService();
         ArrayList<String> apps = new ArrayList<>();
+        long deadline = SystemClock.elapsedRealtime() + APP_QUERY_BUDGET_MS;
         for (String name : allowed) {
             if (apps.size() >= MAX_APPS) break;
+            if (SystemClock.elapsedRealtime() >= deadline) {
+                XposedModule.printLog("Self-check per-app scan stopped at " + apps.size()
+                        + "/" + allowed.size() + " apps (time budget)");
+                break;
+            }
             ApplicationInfo info;
             try {
                 info = pm.getApplicationInfo(name, 0);
