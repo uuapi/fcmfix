@@ -8,7 +8,7 @@
 [![LSPosed](https://img.shields.io/badge/LSPosed-libxposed%20API%20102-4338CA?logo=x)](#构建)
 [![UI](https://img.shields.io/badge/UI-Compose%20Material%203-7F52FF?logo=jetpackcompose&logoColor=white)](#界面)
 [![minSdk](https://img.shields.io/badge/minSdk-29-blue)](app/build.gradle)
-[![Version](https://img.shields.io/badge/versionCode-60-orange)](app/build.gradle)
+[![Version](https://img.shields.io/badge/versionCode-62-orange)](app/build.gradle)
 [![License](https://img.shields.io/badge/license-MIT-05A14E)](LICENSE)
 
 *基于 [kooritea/fcmfix](https://github.com/kooritea/fcmfix) · 参考 [FCMFix ColorOS](https://github.com/Artifical0/fcmfix-oneplus15-coloros16) · 独立签名维护*
@@ -186,6 +186,7 @@ flowchart LR
 ## 兼容性与降级设计
 
 - **签名探测全部 fail-loud**：闸门方法按“方法名 + boolean 返回类型 + 参数形状”枚举匹配；类缺失 → `NoClassDefFoundError`、签名不匹配 → `NoSuchMethodError`，统一记 `hook error <组名>` 并**保持系统原行为**——任何单组失配不影响其他组；
+- **运行期同样兜底**：hook 回调在分发层包 try/catch——单个回调在失配固件上抛出异常时只限流记录 `…HookedMethod error in …` 并按未干预处理，不会把异常打进 system_server；
 - **签名表显式声明**：`OplusAttribution` 只收录国行 PLK110（ColorOS 16/17）核对过的 3 张签名，未知 OTA 直接拒绝旁路而不是猜测参数位；
 - **诊断先于失效**：状态页把每组的实际安装结果摆在明面上，国际版与国行的类名差异可直接从失配详情定位。
 

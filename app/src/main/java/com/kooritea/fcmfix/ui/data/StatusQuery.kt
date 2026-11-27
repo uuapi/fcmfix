@@ -27,7 +27,15 @@ object StatusQuery {
         if (Build.VERSION.SDK_INT < 34) return Bundle()
         return withTimeoutOrNull(TIMEOUT_MS) {
             suspendCancellableCoroutine { continuation ->
-                val query = Intent(context.packageName + HookStatus.QUERY_ACTION_SUFFIX).putExtra(extra, true)
+                // Target the system framework explicitly. With an implicit ordered broadcast any
+                // app could register the same action and overwrite system_server's answer after
+                // it ran: same-priority dynamic receivers run in registration order, so a later
+                // app's setResultExtras wins and could fake a clean self-check. Dynamic receivers
+                // are filtered by intent.getPackage() (IntentResolver#isPackageForFilter), and
+                // system_server's registrations belong to the "android" package.
+                val query = Intent(context.packageName + HookStatus.QUERY_ACTION_SUFFIX)
+                    .setPackage("android")
+                    .putExtra(extra, true)
                 val options = BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
                 val receiver = object : BroadcastReceiver() {
                     override fun onReceive(context: Context, intent: Intent) {

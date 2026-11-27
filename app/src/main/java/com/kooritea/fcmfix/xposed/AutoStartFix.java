@@ -112,8 +112,11 @@ public class AutoStartFix extends XposedModule {
             XC_MethodHook methodHook = new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    // Like every other hook in this class: resolve the target the null-safe way.
+                    // A null component here used to throw inside the hooked system method.
+                    if (!(methodHookParam.args.length > 1 && methodHookParam.args[1] instanceof Intent)) return;
                     Intent intent = (Intent) methodHookParam.args[1];
-                    String target = intent.getComponent().getPackageName();
+                    String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)) {
                         // 拿不到action，先放了
                         printLog("[" + intent.getAction() + "]AutoStartManagerServiceStubImpl.isAllowStartService package_name: " + target, true);

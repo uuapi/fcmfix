@@ -33,6 +33,9 @@ public class MiuiLocalNotificationFix extends XposedModule  {
                 XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam methodHookParam) {
+                        // Position 3 holds the package on the known MIUI signatures; on other
+                        // firmware do not trust the cast and keep the system's own decision.
+                        if(methodHookParam.args.length <= 3 || !(methodHookParam.args[3] instanceof String)) return;
                         if(targetIsAllow((String)methodHookParam.args[3])){
                             methodHookParam.setResult("isAllowLocalNotification".equals(finalTargetMethod.getName()));
                         }

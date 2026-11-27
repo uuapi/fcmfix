@@ -3,6 +3,7 @@ package com.kooritea.fcmfix.libxposed;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import com.kooritea.fcmfix.util.DiagnosticLogLimiter;
 import com.kooritea.fcmfix.util.LogRing;
 
 import java.lang.reflect.AccessibleObject;
@@ -29,7 +30,20 @@ public final class XposedBridge {
     /** This process's recent module log lines, for the in-app status query's export. */
     private static final LogRing RECENT = new LogRing(1000);
 
+    /** Rate-limits callback error lines so a hook failing on every invocation cannot flood. */
+    private static final DiagnosticLogLimiter ERROR_LIMITER = new DiagnosticLogLimiter();
+
     private XposedBridge() {
+    }
+
+    /** One module callback failed: log it (logcat + in-app report) and keep the host behavior. */
+    private static void logCallbackError(Member member, String phase, Throwable error) {
+        StackTraceElement[] stack = error.getStackTrace();
+        String where = stack.length > 0 ? " at " + stack[0] : "";
+        String filtered = ERROR_LIMITER.filter(
+                "[fcmfix] " + phase + "HookedMethod error in " + member + ": " + error + where,
+                android.os.SystemClock.elapsedRealtime());
+        if (filtered != null) log(filtered);
     }
 
     public static void init(XposedInterface xposed) {
@@ -73,7 +87,14 @@ public final class XposedBridge {
 
                     int beforeCount = 0;
                     for (XC_MethodHook hook : callbacks) {
-                        hook.beforeHookedMethod(param);
+                        try {
+                            hook.beforeHookedMethod(param);
+                        } catch (Throwable error) {
+                            // A callback must never crash the host (system_server): on firmware
+                            // drift a hard cast or field lookup can throw on every delivery, so
+                            // log it rate-limited and run the original method untouched.
+                            logCallbackError(member, "before", error);
+                        }
                         beforeCount++;
                         if (param.isReturnEarly()) {
                             break;
@@ -90,7 +111,11 @@ public final class XposedBridge {
                     }
 
                     for (int i = beforeCount - 1; i >= 0; i--) {
-                        callbacks.get(i).afterHookedMethod(param);
+                        try {
+                            callbacks.get(i).afterHookedMethod(param);
+                        } catch (Throwable error) {
+                            logCallbackError(member, "after", error);
+                        }
                     }
 
                     if (param.hasThrowable()) {

@@ -257,7 +257,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
             if (!autoNotifyRequested.add(name)) continue
             try {
                 app.sendBroadcast(
-                    Intent(app.packageName + ".enable.notify").putExtra("pkg", name), null,
+                    Intent(app.packageName + ".enable.notify").setPackage("android").putExtra("pkg", name), null,
                     BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle(),
                 )
             } catch (e: Throwable) {
@@ -282,7 +282,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
         }
         try {
             app.sendBroadcast(
-                Intent(app.packageName + ".enable.notify").putExtra("pkg", packageName), null,
+                Intent(app.packageName + ".enable.notify").setPackage("android").putExtra("pkg", packageName), null,
                 BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle(),
             )
             // The hook flips the toggle off the main thread; the debounced re-query shows it.

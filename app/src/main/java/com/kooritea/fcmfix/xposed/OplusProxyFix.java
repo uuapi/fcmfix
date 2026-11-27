@@ -4,12 +4,14 @@ import android.content.pm.PackageManager;
 import android.os.SystemClock;
 import android.os.WorkSource;
 
+import java.lang.reflect.Constructor;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.kooritea.fcmfix.util.XposedUtils;
 
 import com.kooritea.fcmfix.libxposed.XC_MethodHook;
 import com.kooritea.fcmfix.libxposed.XC_MethodReplacement;
+import com.kooritea.fcmfix.libxposed.XposedBridge;
 import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 public class OplusProxyFix extends XposedModule {
@@ -108,16 +110,25 @@ public class OplusProxyFix extends XposedModule {
     private void startHookOplusProxyWakeLock() throws Exception {
         Class<?> oplusWakelockClass = XposedHelpers.findClass("com.android.server.power.OplusProxyWakeLock", classLoader);
 
-        XposedUtils.findAndHookConstructorAnyParam(oplusWakelockClass, new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                if (s_oplusProxyWakeLock != null) {
-                    printLog("warn: OplusProxyWakeLock constructed multiple times!");
-                    return;
+        // Hook every constructor: with no preferred parameter types the best-match search always
+        // lands on the last declared overload, so if the framework instantiates the wake lock
+        // through another one, the capture below never runs and unfreeze silently does nothing.
+        Constructor<?>[] constructors = oplusWakelockClass.getDeclaredConstructors();
+        if (constructors.length == 0) {
+            throw new NoSuchMethodError(oplusWakelockClass.getName() + "#<init>");
+        }
+        for (Constructor<?> constructor : constructors) {
+            XposedBridge.hookMethod(constructor, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    if (s_oplusProxyWakeLock != null) {
+                        printLog("warn: OplusProxyWakeLock constructed multiple times!");
+                        return;
+                    }
+                    s_oplusProxyWakeLock = param.thisObject;
                 }
-                s_oplusProxyWakeLock = param.thisObject;
-            }
-        });
+            });
+        }
     }
 
     private static int getTargetUidFromPackageName(String packageName) {
@@ -162,8 +173,14 @@ public class OplusProxyFix extends XposedModule {
                 s_useFourParams = true;
             } catch (Throwable e) {
                 // 降级用3参
-                XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
-                s_useFourParams = false;
+                try {
+                    XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
+                    s_useFourParams = false;
+                } catch (Throwable fallbackError) {
+                    // Neither signature exists (renamed or moved on this firmware): stay
+                    // fail-safe instead of throwing into the broadcast hook caller.
+                    printLog("unfreezeIfNeed unavailable: " + fallbackError);
+                }
             }
             s_signatureDetected = true;
         } else {

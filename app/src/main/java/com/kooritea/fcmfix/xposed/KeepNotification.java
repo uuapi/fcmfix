@@ -110,6 +110,17 @@ public class KeepNotification extends XposedModule{
             if(pkg_args_index == 0 || reason_args_index == 0){
                 throw new NoSuchMethodError();
             }
+            // Validate the assumed positions like BroadcastFix verifies its own: on a different
+            // overload shape this must fail the install (reported as a hook error, system keeps
+            // its behavior), not throw ClassCastException/IOOBE inside the hooked method.
+            Class<?>[] types = targetMethod.getParameterTypes();
+            if(pkg_args_index >= types.length || types[pkg_args_index] != String.class
+                    || reason_args_index >= types.length || types[reason_args_index] != int.class){
+                throw new NoSuchMethodError("cancelAllNotificationsInt shape mismatch: pkg@"
+                        + pkg_args_index + "=" + (pkg_args_index < types.length ? types[pkg_args_index].getName() : "missing")
+                        + ", reason@" + reason_args_index + "="
+                        + (reason_args_index < types.length ? types[reason_args_index].getName() : "missing"));
+            }
             int finalPkg_args_index = pkg_args_index;
             int finalReason_args_index = reason_args_index;
             XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
