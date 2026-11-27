@@ -27,14 +27,18 @@ object StatusQuery {
         if (Build.VERSION.SDK_INT < 34) return Bundle()
         return withTimeoutOrNull(TIMEOUT_MS) {
             suspendCancellableCoroutine { continuation ->
-                // Target the system framework explicitly. With an implicit ordered broadcast any
-                // app could register the same action and overwrite system_server's answer after
-                // it ran: same-priority dynamic receivers run in registration order, so a later
-                // app's setResultExtras wins and could fake a clean self-check. Dynamic receivers
-                // are filtered by intent.getPackage() (IntentResolver#isPackageForFilter), and
-                // system_server's registrations belong to the "android" package.
+                // The query must reach system_server's registered receiver while staying out of
+                // reach of other apps: with an implicit ordered broadcast, any app could register
+                // the same action and overwrite system_server's answer after it ran (same-priority
+                // dynamic receivers run in registration order, so a later app's setResultExtras
+                // wins and could fake a clean self-check). Receiver-permission gating is the fix
+                // that works on every broadcast queue: deliverers without WRITE_SECURE_SETTINGS
+                // (held by the system framework, unobtainable without adb) are skipped entirely,
+                // so no third-party app even sees the query. Package-targeting with
+                // setPackage("android") was tried here and cannot replace it: the modern broadcast
+                // queue (Android 14+ emulators, OxygenOS 16) resolves targeted broadcasts only
+                // against manifest receivers and finishes the call with zero dispatches.
                 val query = Intent(context.packageName + HookStatus.QUERY_ACTION_SUFFIX)
-                    .setPackage("android")
                     .putExtra(extra, true)
                 val options = BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
                 val receiver = object : BroadcastReceiver() {
@@ -43,7 +47,10 @@ object StatusQuery {
                         if (continuation.isActive) continuation.resume(extras ?: Bundle())
                     }
                 }
-                context.sendOrderedBroadcast(query, null, options, receiver, Handler(Looper.getMainLooper()), 0, null, null)
+                context.sendOrderedBroadcast(
+                    query, "android.permission.WRITE_SECURE_SETTINGS", options, receiver,
+                    Handler(Looper.getMainLooper()), 0, null, null,
+                )
             }
         } ?: Bundle()
     }

@@ -48,6 +48,8 @@ public abstract class XposedModule {
     private static Boolean isInitReceiver = false;
     public static Boolean isBootComplete = false;
     private static volatile Thread loadConfigThread = null;
+    /** An update.config arrived while a load was in flight; rerun it when the load finishes. */
+    private static boolean loadConfigPending = false;
     private static final Set<String> loggedWarnings = ConcurrentHashMap.newKeySet();
     protected static final String MODULE_PACKAGE_NAME = "com.kooritea.fcmfix";
     private static final String ACTION_QUERY_STATUS = MODULE_PACKAGE_NAME + HookStatus.QUERY_ACTION_SUFFIX;
@@ -172,6 +174,7 @@ public abstract class XposedModule {
     /** One reload at a time: this is called from receiver threads and hook callbacks alike. */
     protected static synchronized void onUpdateConfig() {
         if (loadConfigThread == null) {
+            loadConfigPending = false;
             loadConfigThread = new Thread() {
                 @Override
                 public void run() {
@@ -196,9 +199,16 @@ public abstract class XposedModule {
                         printLog("通过现代Xposed API读取配置失败: " + e.getMessage());
                     }
                     loadConfigThread = null;
+                    if (loadConfigPending) {
+                        // A newer update.config landed while this load was running: reload again
+                        // so the newest config wins instead of being dropped silently.
+                        onUpdateConfig();
+                    }
                 }
             };
             loadConfigThread.start();
+        } else {
+            loadConfigPending = true;
         }
     }
 

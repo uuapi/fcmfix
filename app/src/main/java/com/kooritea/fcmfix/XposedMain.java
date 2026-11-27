@@ -15,6 +15,38 @@ import io.github.libxposed.api.XposedModuleInterface;
 
 public class XposedMain extends io.github.libxposed.api.XposedModule {
 
+    /**
+     * API 102 entry: the framework instantiates this class without arguments and calls its own
+     * two-argument attachFramework on the instance.
+     */
+    public XposedMain() {
+    }
+
+    /**
+     * API 101 entry: the framework's loader reflects on a two-argument constructor with
+     * ModuleLoadedParam. Without it, module.prop's minApiVersion claim is false and frameworks
+     * implementing that convention fail to load the module with a NoSuchMethodError. The
+     * XposedInterface is attached reflectively because the wrapper's attach signature changed
+     * between API 101 (one argument) and API 102 (two arguments); this constructor only runs on
+     * pre-102 frameworks, and an API 100 framework (no attach method at all) stays unsupported,
+     * which is what minApiVersion=101 declares.
+     */
+    public XposedMain(io.github.libxposed.api.XposedInterface base,
+                      XposedModuleInterface.ModuleLoadedParam param) {
+        Runnable detach = () -> { };
+        try {
+            getClass().getMethod("attachFramework", io.github.libxposed.api.XposedInterface.class,
+                    Runnable.class).invoke(this, base, detach);
+        } catch (Throwable e) {
+            try {
+                getClass().getMethod("attachFramework", io.github.libxposed.api.XposedInterface.class)
+                        .invoke(this, base);
+            } catch (Throwable attachError) {
+                android.util.Log.e("fcmfix", "cannot attach framework api classes", attachError);
+            }
+        }
+    }
+
     @Override
     public void onSystemServerStarting(SystemServerStartingParam param) {
         XposedBridge.init(this);

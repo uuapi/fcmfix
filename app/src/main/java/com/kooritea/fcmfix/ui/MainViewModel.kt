@@ -256,8 +256,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
             if (!check.auto || check.notify != 0) continue
             if (!autoNotifyRequested.add(name)) continue
             try {
+                // Receiver-permission gated like the status query: only the system framework may
+                // receive enable requests (see StatusQuery for the broadcast-queue constraint).
                 app.sendBroadcast(
-                    Intent(app.packageName + ".enable.notify").setPackage("android").putExtra("pkg", name), null,
+                    Intent(app.packageName + ".enable.notify").putExtra("pkg", name),
+                    "android.permission.WRITE_SECURE_SETTINGS",
                     BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle(),
                 )
             } catch (e: Throwable) {
@@ -282,7 +285,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
         }
         try {
             app.sendBroadcast(
-                Intent(app.packageName + ".enable.notify").setPackage("android").putExtra("pkg", packageName), null,
+                Intent(app.packageName + ".enable.notify").putExtra("pkg", packageName),
+                "android.permission.WRITE_SECURE_SETTINGS",
                 BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle(),
             )
             // The hook flips the toggle off the main thread; the debounced re-query shows it.
