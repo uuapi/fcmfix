@@ -17,7 +17,7 @@ public class XposedUtils {
 
     public static XC_MethodHook.Unhook findAndHookConstructorAnyParam(Class<?> clazz, XC_MethodHook callbacks, Class<?> ...parameterTypes){
         Constructor<?> bestMatch = null;
-        int matchCount = 0;
+        int matchCount = -1;
         for(Constructor<?> constructor : clazz.getDeclaredConstructors()){
             Class<?>[] constructorParamTypes = constructor.getParameterTypes();
             int _matchCount = 0;
@@ -26,7 +26,12 @@ public class XposedUtils {
                     _matchCount++;
                 }
             }
-            if(_matchCount >= matchCount){
+            // With no preferred types, take the widest overload deterministically: declared
+            // order is VM-specific, so "last wins" would pick a different constructor on
+            // different firmware builds for the same class.
+            if(_matchCount > matchCount
+                    || (_matchCount == matchCount && parameterTypes.length == 0
+                        && bestMatch != null && constructorParamTypes.length > bestMatch.getParameterTypes().length)){
                 matchCount = _matchCount;
                 bestMatch = constructor;
             }
@@ -72,7 +77,7 @@ public class XposedUtils {
 
     public static XC_MethodHook.Unhook findAndHookMethodAnyParam(Class<?> clazz, String methodName, XC_MethodHook callbacks, Object ...parameterTypes){
         Method bestMatch = null;
-        int matchCount = 0;
+        int matchCount = -1;
         for(Method method : clazz.getDeclaredMethods()){
             if(methodName.equals(method.getName())){
                 Class<?>[] methodParamTypes = method.getParameterTypes();
@@ -82,7 +87,11 @@ public class XposedUtils {
                         _matchCount++;
                     }
                 }
-                if(_matchCount >= matchCount){
+                // Same rule as the constructor helper: without preferred types the widest
+                // overload wins deterministically instead of whichever the VM lists last.
+                if(_matchCount > matchCount
+                        || (_matchCount == matchCount && parameterTypes.length == 0
+                            && bestMatch != null && methodParamTypes.length > bestMatch.getParameterTypes().length)){
                     matchCount = _matchCount;
                     bestMatch = method;
                 }

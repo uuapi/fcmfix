@@ -19,7 +19,14 @@ jobs:
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-      
+
+    - uses: dorny/paths-filter@v3
+      id: changes
+      with:
+        filters: |
+          src:
+            - 'app/build.gradle'
+
     - name: Retrieve version name
       run: echo VERSION_NAME=$(date "+%Y%m%d")_$(echo ${{ github.event.head_commit.id }} | head -c 7) >> $GITHUB_ENV
 
@@ -50,9 +57,9 @@ jobs:
       env:
         BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOL_VERSION }}
 
-    - name: Renamae
+    - name: Rename APK
       run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned-signed.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
-    
+
     - name: Upload built apk
       uses: actions/upload-artifact@v4
       with:
@@ -67,16 +74,12 @@ jobs:
         token: "${{ secrets.TOKEN }}"
         files: |
           ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
-    
-    - uses: dorny/paths-filter@v3
-      id: changes
-      with:
-        filters: |
-          src:
-            - 'app/build.gradle'
 
+    # Publishes to the upstream module repository; this fork keeps its own signing key, so the
+    # step only applies when TOKEN_CLASSIC is configured (upstream). Never fail the build here.
     - name: Release lsposed module repository
       if: steps.changes.outputs.src == 'true'
+      continue-on-error: true
       uses: softprops/action-gh-release@v2
       with:
         name: "Auto Release ${{ env.VERSION_NAME }}"

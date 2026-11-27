@@ -47,7 +47,7 @@ public abstract class XposedModule {
     private static final ArrayList<XposedModule> instances = new ArrayList<>();
     private static Boolean isInitReceiver = false;
     public static Boolean isBootComplete = false;
-    private static Thread loadConfigThread = null;
+    private static volatile Thread loadConfigThread = null;
     private static final Set<String> loggedWarnings = ConcurrentHashMap.newKeySet();
     protected static final String MODULE_PACKAGE_NAME = "com.kooritea.fcmfix";
     private static final String ACTION_QUERY_STATUS = MODULE_PACKAGE_NAME + HookStatus.QUERY_ACTION_SUFFIX;
@@ -169,7 +169,8 @@ public abstract class XposedModule {
         return snapshot.options.getOrDefault(key, defaultValue);
     }
 
-    protected static void onUpdateConfig() {
+    /** One reload at a time: this is called from receiver threads and hook callbacks alike. */
+    protected static synchronized void onUpdateConfig() {
         if (loadConfigThread == null) {
             loadConfigThread = new Thread() {
                 @Override
@@ -280,7 +281,7 @@ public abstract class XposedModule {
                     String action = intent.getAction();
                     if (Intent.ACTION_PACKAGE_REMOVED.equals(action) && "com.kooritea.fcmfix".equals(intent.getData().getSchemeSpecificPart())) {
                         Bundle extras = intent.getExtras();
-                        if (extras.containsKey(Intent.EXTRA_REPLACING) && extras.getBoolean(Intent.EXTRA_REPLACING)) {
+                        if (extras != null && extras.containsKey(Intent.EXTRA_REPLACING) && extras.getBoolean(Intent.EXTRA_REPLACING)) {
                             return;
                         }
                         onUninstallFcmfix();
@@ -449,9 +450,19 @@ public abstract class XposedModule {
             // A queued broadcast is attributed by BroadcastRecord, never by ambient Binder identity.
             for (Object arg : param.args) {
                 if (arg == null || !"com.android.server.am.BroadcastRecord".equals(arg.getClass().getName())) continue;
-                return XposedHelpers.getObjectField(arg, "intent") == intent
+                boolean trusted = XposedHelpers.getObjectField(arg, "intent") == intent
                         && FcmTrust.RECEIVE.equals(intent.getAction())
                         && isGmsUid((Integer) XposedHelpers.getObjectField(arg, "callingUid"));
+                if (trusted) {
+                    // The push itself is a trusted delivery: open the target's self-bind window
+                    // here, while the app is still starting. The window's whole purpose - letting
+                    // the app bind its own FirebaseMessagingService right after the push (which
+                    // the service gates would otherwise block) - only exists if it opens now;
+                    // GMS-initiated service starts open it too, but a plain broadcast push never
+                    // reached that path and the selfInWindow branch stayed unreachable.
+                    OplusProxyFix.beginFcmDeliveryWindow(target);
+                }
+                return trusted;
             }
             if (param.method instanceof Method) {
                 Method method = (Method) param.method;
